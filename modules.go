@@ -18,10 +18,13 @@ func ProvidesIf(provide interface{}, acceptedmodes ...string) {
 			return
 		}
 	}
+
 }
 
-func Provides(method interface{}) {
-	provideslist = append(provideslist, method)
+func Provides(methods ...interface{}) {
+	for _, item := range methods {
+		provideslist = append(provideslist, item)
+	}
 }
 
 func Invoke(invoke interface{}) {
