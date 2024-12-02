@@ -20,16 +20,6 @@ func ProvidesIf(provide interface{}, acceptedmodes ...string) {
 	}
 }
 
-func ProvidesAndInvokeIf(provide interface{}, invoke interface{}, acceptedmodes ...string) {
-	for _, item := range acceptedmodes {
-		if item == Mode {
-			provideslist = append(provideslist, provide)
-			invokelist = append(invokelist, fx.Invoke(invoke))
-			return
-		}
-	}
-}
-
 func Provides(method interface{}) {
 	provideslist = append(provideslist, method)
 }
