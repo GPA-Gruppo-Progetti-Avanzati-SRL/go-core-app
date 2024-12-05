@@ -37,6 +37,18 @@ func SupplyIf(iface interface{}, acceptedmodes ...string) {
 	}
 }
 
+func ProvidesAndSupplyIf(provide interface{}, supply interface{}, acceptedmodes ...string) {
+
+	for _, item := range acceptedmodes {
+		if item == Mode {
+			Provides(provide)
+			Supply(supply)
+			return
+		}
+	}
+
+}
+
 func Provides(methods ...interface{}) {
 	for _, item := range methods {
 		provideslist = append(provideslist, item)
