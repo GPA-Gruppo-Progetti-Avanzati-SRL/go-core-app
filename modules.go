@@ -22,9 +22,19 @@ func ProvidesIf(provide interface{}, acceptedmodes ...string) {
 
 }
 
-func Supply(iface interface{}) {
+func Supply(ifaces ...interface{}) {
+	for _, iface := range ifaces {
+		supply = append(supply, fx.Supply(iface))
+	}
+}
 
-	supply = append(supply, fx.Supply(iface))
+func SupplyIf(iface interface{}, acceptedmodes ...string) {
+	for _, item := range acceptedmodes {
+		if item == Mode {
+			supply = append(supply, fx.Supply(iface))
+			return
+		}
+	}
 }
 
 func Provides(methods ...interface{}) {
