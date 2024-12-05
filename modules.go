@@ -10,6 +10,7 @@ import (
 var provideslist []interface{}
 var Mode = os.Getenv("MODE")
 var invokelist []fx.Option
+var supply []fx.Option
 
 func ProvidesIf(provide interface{}, acceptedmodes ...string) {
 	for _, item := range acceptedmodes {
@@ -19,6 +20,11 @@ func ProvidesIf(provide interface{}, acceptedmodes ...string) {
 		}
 	}
 
+}
+
+func Supply(iface interface{}) {
+
+	supply = append(supply, fx.Supply(iface))
 }
 
 func Provides(methods ...interface{}) {
@@ -45,7 +51,8 @@ func invokes() fx.Option {
 }
 
 func provides() fx.Option {
-	return fx.Options(fx.Provide(provideslist...))
+	supply = append(supply, fx.Provide(provideslist...))
+	return fx.Options(supply...)
 }
 
 func Start() {
