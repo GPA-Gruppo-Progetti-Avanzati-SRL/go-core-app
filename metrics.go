@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
@@ -47,16 +48,26 @@ type ServerMetrics struct {
 
 func NewServerMetrics(lc fx.Lifecycle) *ServerMetrics {
 	s := &ServerMetrics{}
+	srv := http.NewServeMux()
+	srv.Handle("/metrics", promhttp.Handler())
+	server := &http.Server{Addr: ":2112", Handler: srv}
 
 	lc.Append(fx.Hook{
 		OnStart: func(ctx context.Context) error {
 			go func() {
-				http.Handle("/metrics", promhttp.Handler())
-				http.ListenAndServe(":2112", nil)
+				log.Info().Msg("Starting metrics server on port 2112")
+				if err := server.ListenAndServe(); err != nil {
+
+				}
+
 			}()
 			return nil
 		},
 		OnStop: func(ctx context.Context) error {
+			log.Info().Msg("Shutting down server metrics")
+			if err := server.Shutdown(ctx); err != nil {
+				return err
+			}
 			return nil
 		},
 	})
