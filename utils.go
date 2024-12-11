@@ -70,17 +70,40 @@ func StringToDate(date string) (time.Time, *ApplicationError) {
 }
 
 func StringToDatePtr(date string) *time.Time {
-	timestamp, _ := time.Parse(DateFormat, date)
+	if date == "" {
+		return nil
+	}
+	timestamp, err := time.Parse(DateFormat, date)
+	if err != nil {
+		log.Error().Msgf("StringToDatePtr Error parsing date: %s", err.Error())
+		return nil
+	}
+
 	return &timestamp
 }
 
 func StringToDateTime(date string) time.Time {
-	timestamp, _ := time.Parse(DateTimeFormat, date)
+	if date == "" {
+		return time.Time{}
+	}
+	timestamp, err := time.Parse(DateTimeFormat, date)
+	if err != nil {
+		log.Error().Msgf("StringToDateTime Error parsing date: %s", err.Error())
+		return time.Time{}
+	}
 	return timestamp
 }
 
 func StringToDateTimePtr(date string) *time.Time {
-	timestamp, _ := time.Parse(DateTimeFormat, date)
+	if date == "" {
+		return nil
+	}
+
+	timestamp, err := time.Parse(DateTimeFormat, date)
+	if err != nil {
+		log.Error().Msgf("StringToDateTimePtr Error parsing date: %s", err.Error())
+		return nil
+	}
 	return &timestamp
 }
 
@@ -93,6 +116,9 @@ func DateTimeToString(date time.Time) string {
 }
 
 func DateToStringPtr(date time.Time) *string {
+	if date.IsZero() {
+		return nil
+	}
 	stringDate := date.Format(DateFormat)
 	return &stringDate
 }
