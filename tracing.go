@@ -14,6 +14,7 @@ import (
 
 func init() {
 	Provides(NewOtelTracer)
+	Invoke(NewOtelTracer)
 }
 
 type Tracer struct {
