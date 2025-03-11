@@ -12,15 +12,11 @@ import (
 	"go.uber.org/fx"
 )
 
-func init() {
-	Provides(NewOtelTracer)
-}
-
 type Tracer struct {
 	TracerProvider *trace.TracerProvider
 }
 
-func NewOtelTracer(lc fx.Lifecycle) *Tracer {
+func NewTracer(lc fx.Lifecycle) *Tracer {
 
 	tracer := new(Tracer)
 	lc.Append(fx.Hook{

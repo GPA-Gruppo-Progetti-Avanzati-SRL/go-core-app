@@ -1,10 +1,12 @@
 package core
 
 import (
+	"fmt"
 	"github.com/ipfans/fxlogger"
 	"github.com/rs/zerolog/log"
 	"go.uber.org/fx"
 	"os"
+	"runtime"
 )
 
 var provideslist []interface{}
@@ -78,6 +80,12 @@ func provides() fx.Option {
 }
 
 func Start() {
+
+	fmt.Printf("%s\nVersion: %s\nSha: %s\nBuildDate: %s\nRuntime: %s\nOS: %s\nArch: %s\n", string(Logo), BuildVersion, SHA, BuildDate, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	if Mode != "" {
+		fmt.Printf("Mode: %s", Mode)
+
+	}
 	fx.New(
 		fx.WithLogger(fxlogger.WithZerolog(log.Logger)),
 		provides(),

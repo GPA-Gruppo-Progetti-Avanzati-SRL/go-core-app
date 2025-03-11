@@ -15,7 +15,6 @@ import (
 )
 
 func init() {
-	Provides(NewServerMetrics)
 
 	promExporter, err := prometheus.New(prometheus.WithoutScopeInfo())
 	if err != nil {
@@ -37,7 +36,7 @@ func init() {
 		metric.WithResource(res),
 	)
 
-	provider.Meter("meterName")
+	provider.Meter(AppName)
 
 	otel.SetMeterProvider(provider)
 
