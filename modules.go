@@ -83,7 +83,7 @@ func Start() {
 
 	fmt.Printf("%s\nVersion: %s\nSha: %s\nBuildDate: %s\nRuntime: %s\nOS: %s\nArch: %s\n", string(Logo), BuildVersion, SHA, BuildDate, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	if Mode != "" {
-		fmt.Printf("Mode: %s", Mode)
+		fmt.Printf("Mode: %s\n", Mode)
 
 	}
 	fx.New(
