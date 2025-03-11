@@ -28,10 +28,6 @@ type Paging struct {
 }
 
 // Paging Request
-type PagingRequest struct {
-	PageSize   int `query:"pagesize" default:"-1"`
-	PageNumber int `query:"pagenumber" default:"-1"`
-}
 
 // Configure default values
 func config(pagingConfig *Config) {
