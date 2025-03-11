@@ -2,13 +2,14 @@ package core
 
 import (
 	"fmt"
+	"os"
+	"strconv"
+	"strings"
+
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/viper"
-	"os"
-	"strconv"
-	"strings"
 )
 
 const (
@@ -22,6 +23,7 @@ type Config struct {
 		Ignore     bool
 		Level      string
 		EnableJSON bool
+		Metric     bool
 	}
 	AppConfig any `yaml:"config" mapstructure:"config" json:"config"`
 }
@@ -55,6 +57,9 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 	}
 
 	viper.SetConfigType("yaml")
+
+	viper.SetDefault("log.metric", true)
+
 	verr := viper.ReadConfig(cfgFileReader)
 	if verr != nil {
 		log.Fatal().Msgf("unable to read config, %v", verr)
@@ -90,6 +95,13 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 		log.Logger = zerolog.New(output).With().Timestamp().Logger()
 	} else {
 		zerolog.TimeFieldFormat = DateTimeZoneFormat
+	}
+
+	if config.Log.Metric {
+		metricHook := &MetricLogHook{}
+		metricHook.Init()
+
+		log.Logger = log.Logger.Hook(metricHook)
 	}
 
 	return nil
