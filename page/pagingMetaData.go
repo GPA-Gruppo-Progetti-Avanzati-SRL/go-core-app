@@ -2,8 +2,9 @@ package page
 
 import (
 	"errors"
-	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app"
 	"math"
+
+	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app"
 )
 
 const (
@@ -20,11 +21,11 @@ var DefaultPageSize, DefaultPageNumber, MaxPageSize int
 // Paging metadata
 type Paging struct {
 	PageSize    int   `json:"pageSize"`
-	TotalItems  int64 `json:"totalItems"`
+	TotalCount  int64 `json:"totalCount"`
 	TotalPages  int   `json:"totalPages"`
 	CurrentPage int   `json:"currentPage"`
 	HasNext     bool  `json:"hasNext"`
-	HasPrev     bool  `json:"hasPrev"`
+	HasPrevious bool  `json:"hasPrevious"`
 }
 
 // Paging Request
@@ -61,11 +62,11 @@ func InitPaging(pagingConfig *Config, pageSize, pageNumber int, totalItems int64
 	// New Paging
 	var p = &Paging{
 		PageSize:    size,
-		TotalItems:  totalItems,
+		TotalCount:  totalItems,
 		TotalPages:  0,
 		CurrentPage: number,
 		HasNext:     false,
-		HasPrev:     false,
+		HasPrevious: false,
 	}
 
 	// Update
@@ -114,10 +115,10 @@ func (p *Paging) Paging() (int, *core.ApplicationError) {
 func (p *Paging) updatePagingMetaData() {
 
 	// If there are no items, TotalPages = 0. Otherwise, calculate TotalPages
-	if p.TotalItems == 0 {
+	if p.TotalCount == 0 {
 		p.setTotalPages(0)
 	} else {
-		p.setTotalPages(int(math.Ceil(float64(p.TotalItems) / float64(p.PageSize))))
+		p.setTotalPages(int(math.Ceil(float64(p.TotalCount) / float64(p.PageSize))))
 	}
 
 	// If pageSize = 0, there is 1 page
@@ -142,19 +143,19 @@ func (p *Paging) updatePagingMetaData() {
 
 // Set TotalItems
 func (p *Paging) SetTotalItems(totalItems int64) {
-	p.TotalItems = totalItems
+	p.TotalCount = totalItems
 	p.updatePagingMetaData()
 }
 
 // Increment TotalItems
 func (p *Paging) IncTotalItems() {
-	p.TotalItems++
+	p.TotalCount++
 	p.updatePagingMetaData()
 }
 
 // Decrement TotalItems
 func (p *Paging) DecTotalItems() {
-	p.TotalItems--
+	p.TotalCount--
 	p.updatePagingMetaData()
 }
 
@@ -216,7 +217,7 @@ func (p *Paging) setHasNext(hasNext bool) {
 
 // Set HasPrev
 func (p *Paging) setHasPrev(hasPrev bool) {
-	p.HasPrev = hasPrev
+	p.HasPrevious = hasPrev
 }
 
 // Validator for PageSize
