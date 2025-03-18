@@ -115,18 +115,37 @@ func DateTimeToString(date time.Time) string {
 	return date.Format(DateTimeFormat)
 }
 
-func DateToStringPtr(date time.Time) *string {
-	if date.IsZero() {
-		return nil
-	}
-	stringDate := date.Format(DateFormat)
-	return &stringDate
-}
-
 func NowTime() time.Time {
 	return time.Now()
 }
 
 func NowString() string {
 	return NowTime().Format(DateTimeFormat)
+}
+
+func DateToStringPtr(date time.Time) *string {
+	return dateToPtr(&date)
+}
+
+func DatePtrToStringPtr(date *time.Time) *string {
+	return dateToPtr(date)
+}
+
+func DatePtrToString(date *time.Time) string {
+	return *dateToPtr(date)
+}
+
+func dateToPtr(date *time.Time) *string {
+	if date == nil {
+		return nil
+	}
+	if date.IsZero() {
+		return nil
+	}
+	str := date.Format(DateFormat)
+	return &str
+}
+
+func GetMidnight(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }

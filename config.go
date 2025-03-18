@@ -3,6 +3,7 @@ package core
 import (
 	"fmt"
 	"os"
+	"reflect"
 	"strconv"
 	"strings"
 
@@ -61,6 +62,7 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 	viper.SetDefault("log.metric", true)
 
 	verr := viper.ReadConfig(cfgFileReader)
+	setDefaultsFromTags(&config)
 	if verr != nil {
 		log.Fatal().Msgf("unable to read config, %v", verr)
 	}
@@ -105,4 +107,17 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 	}
 
 	return nil
+}
+
+func setDefaultsFromTags(config interface{}) {
+	val := reflect.ValueOf(config).Elem()
+	typ := val.Type()
+
+	for i := 0; i < val.NumField(); i++ {
+		field := typ.Field(i)
+		defaultValue, exists := field.Tag.Lookup("default")
+		if exists {
+			viper.SetDefault(field.Tag.Get("mapstructure"), defaultValue)
+		}
+	}
 }
