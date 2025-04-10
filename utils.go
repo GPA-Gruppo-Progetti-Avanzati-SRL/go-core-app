@@ -132,7 +132,15 @@ func DatePtrToStringPtr(date *time.Time) *string {
 }
 
 func DatePtrToString(date *time.Time) string {
-	return *dateToPtr(date)
+	if date == nil {
+		return ""
+	}
+	d := dateToPtr(date)
+	if d == nil {
+		return ""
+	} else {
+		return *d
+	}
 }
 
 func dateToPtr(date *time.Time) *string {

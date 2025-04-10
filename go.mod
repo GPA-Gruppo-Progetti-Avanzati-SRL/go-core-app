@@ -3,11 +3,12 @@ module github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app
 go 1.23.2
 
 require (
-	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.76
+	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.79
+	github.com/go-playground/validator/v10 v10.26.0
 	github.com/ipfans/fxlogger v0.2.0
-	github.com/prometheus/client_golang v1.21.1
-	github.com/rs/zerolog v1.33.0
-	github.com/spf13/viper v1.20.0
+	github.com/prometheus/client_golang v1.22.0
+	github.com/rs/zerolog v1.34.0
+	github.com/spf13/viper v1.20.1
 	go.opentelemetry.io/contrib/exporters/autoexport v0.60.0
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.60.0
 	go.opentelemetry.io/contrib/propagators/autoprop v0.60.0
@@ -30,11 +31,9 @@ require (
 	github.com/go-logr/stdr v1.2.2 // indirect
 	github.com/go-playground/locales v0.14.1 // indirect
 	github.com/go-playground/universal-translator v0.18.1 // indirect
-	github.com/go-playground/validator/v10 v10.25.0 // indirect
 	github.com/go-viper/mapstructure/v2 v2.2.1 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.26.3 // indirect
-	github.com/klauspost/compress v1.18.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
 	github.com/lucasjones/reggen v0.0.0-20200904144131-37ba4fa293bb // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
