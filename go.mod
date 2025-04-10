@@ -3,7 +3,7 @@ module github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app
 go 1.23.2
 
 require (
-	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.79
+	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.80
 	github.com/go-playground/validator/v10 v10.26.0
 	github.com/ipfans/fxlogger v0.2.0
 	github.com/prometheus/client_golang v1.22.0
