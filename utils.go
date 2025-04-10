@@ -111,6 +111,15 @@ func DateToString(date time.Time) string {
 	return date.Format(DateFormat)
 }
 
+func StringPtrToString(s *string) string {
+	if s == nil {
+		return ""
+	} else {
+		return *s
+	}
+
+}
+
 func DateTimeToString(date time.Time) string {
 	return date.Format(DateTimeFormat)
 }
