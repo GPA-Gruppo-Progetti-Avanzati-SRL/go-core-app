@@ -2,7 +2,6 @@ package core
 
 import (
 	"fmt"
-	"github.com/go-playground/validator/v10"
 	"os"
 	"strconv"
 	"strings"
@@ -18,8 +17,6 @@ const (
 	DateTimeFormat     = "2006-01-02 15:04:05"
 	DateTimeZoneFormat = "2006-01-02T15:04:05.999Z07:00"
 )
-
-var validate = validator.New()
 
 type Config struct {
 	Log struct {
@@ -108,7 +105,7 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 		log.Logger = log.Logger.Hook(metricHook)
 	}
 
-	if errValidate := validate.Struct(config); errValidate != nil {
+	if errValidate := ValidateStruct(config); errValidate != nil {
 		log.Err(errValidate).Msgf("%v", config)
 		log.Fatal().Err(errValidate).Msgf("error validating config, %v", errValidate)
 	}
