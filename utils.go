@@ -55,7 +55,7 @@ func ConvertStringToTimeDate(input string) (time.Time, error) {
 }
 
 func StringToDate(date string) (time.Time, *ApplicationError) {
-	timestamp, err := time.Parse(DateFormat, date)
+	timestamp, err := time.ParseInLocation(DateFormat, date, time.Local)
 
 	if err != nil {
 		return time.Time{}, &ApplicationError{
@@ -99,7 +99,7 @@ func StringToDateTimePtr(date string) *time.Time {
 		return nil
 	}
 
-	timestamp, err := time.Parse(DateTimeFormat, date)
+	timestamp, err := time.ParseInLocation(DateTimeFormat, date, time.Local)
 	if err != nil {
 		log.Error().Msgf("StringToDateTimePtr Error parsing date: %s", err.Error())
 		return nil
