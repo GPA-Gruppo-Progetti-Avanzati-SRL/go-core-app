@@ -73,7 +73,7 @@ func StringToDatePtr(date string) *time.Time {
 	if date == "" {
 		return nil
 	}
-	timestamp, err := time.Parse(DateFormat, date)
+	timestamp, err := time.ParseInLocation(DateFormat, date, time.Local)
 	if err != nil {
 		log.Error().Msgf("StringToDatePtr Error parsing date: %s", err.Error())
 		return nil
@@ -86,7 +86,7 @@ func StringToDateTime(date string) time.Time {
 	if date == "" {
 		return time.Time{}
 	}
-	timestamp, err := time.Parse(DateTimeFormat, date)
+	timestamp, err := time.ParseInLocation(DateTimeFormat, date, time.Local)
 	if err != nil {
 		log.Error().Msgf("StringToDateTime Error parsing date: %s", err.Error())
 		return time.Time{}
