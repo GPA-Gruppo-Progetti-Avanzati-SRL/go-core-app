@@ -12,7 +12,7 @@ import (
 const ErrValidation = "ERR_VALIDATION"
 
 var Validator = validator.New()
-var Tranlator = ut.New(it.New(), it.New())
+var Translator = ut.New(it.New(), it.New())
 
 func ValidateStruct(i interface{}) *ApplicationError {
 
@@ -25,7 +25,7 @@ func ValidateStruct(i interface{}) *ApplicationError {
 
 		if errors.As(verr, &errValidate) {
 			for _, everr := range errValidate {
-				errorMessages = append(errorMessages, fmt.Sprintf("Field '%s': %s.", everr.Field(), everr.Translate(Tranlator.GetFallback())))
+				errorMessages = append(errorMessages, fmt.Sprintf("Field '%s': %s.", everr.Field(), everr.Translate(Translator.GetFallback())))
 			}
 			errmsg = fmt.Sprintf("Validation errors: %s", errorMessages)
 		} else {
