@@ -76,54 +76,70 @@ func configureLog(logLevel int) {
 
 }
 
+type FlagDefinition struct {
+	name  string
+	short string
+	val   reflect.Value
+	usage string
+	field reflect.StructField
+}
+
 func autoDefineFlags() {
 	val := reflect.ValueOf(TaskConfig).Elem()
 	typ := val.Type()
 
 	for i := 0; i < typ.NumField(); i++ {
 		field := typ.Field(i)
-		name := field.Tag.Get("mapstructure")
-		usage := field.Tag.Get("usage")
-		required := field.Tag.Get("required")
-		short := field.Tag.Get("short")
-		if short != "" {
-			switch field.Type.Kind() {
-			case reflect.Int:
-				Task.Flags().IntP(name, short, val.Field(i).Interface().(int), usage)
-			case reflect.Bool:
-				Task.Flags().BoolP(name, short, val.Field(i).Interface().(bool), usage)
-			case reflect.String:
-				Task.Flags().StringP(name, short, val.Field(i).Interface().(string), usage)
-			case reflect.Slice, reflect.Array:
-				if slice, ok := val.Field(i).Interface().([]string); ok {
-					Task.Flags().StringSliceVarP(&slice, name, short, slice, usage)
-				} else {
-					log.Error().Msgf("Campo %s non è di tipo []string", name)
-				}
-
-			}
-
-		} else {
-			switch field.Type.Kind() {
-			case reflect.Int:
-				Task.Flags().Int(name, val.Field(i).Interface().(int), usage)
-			case reflect.Bool:
-				Task.Flags().Bool(name, val.Field(i).Interface().(bool), usage)
-			case reflect.String:
-				Task.Flags().String(name, val.Field(i).Interface().(string), usage)
-			case reflect.Slice, reflect.Array:
-				if slice, ok := val.Field(i).Interface().([]string); ok {
-					Task.Flags().StringSliceVar(&slice, name, slice, usage)
-				} else {
-					log.Error().Msgf("Campo %s non è di tipo []string", name)
-				}
-
-			}
-
+		flagDef := FlagDefinition{
+			name:  field.Tag.Get("mapstructure"),
+			short: field.Tag.Get("short"),
+			val:   val.Field(i),
+			usage: field.Tag.Get("usage"),
+			field: field,
 		}
 
-		if required == "true" {
-			Task.MarkFlagRequired(name)
+		addFlag(flagDef)
+
+		if required := field.Tag.Get("required"); required == "true" {
+			Task.MarkFlagRequired(flagDef.name)
+		}
+	}
+}
+
+func addFlag(def FlagDefinition) {
+	flags := Task.Flags()
+
+	switch def.field.Type.Kind() {
+	case reflect.Int:
+		value := def.val.Interface().(int)
+		if def.short != "" {
+			flags.IntP(def.name, def.short, value, def.usage)
+		} else {
+			flags.Int(def.name, value, def.usage)
+		}
+	case reflect.Bool:
+		value := def.val.Interface().(bool)
+		if def.short != "" {
+			flags.BoolP(def.name, def.short, value, def.usage)
+		} else {
+			flags.Bool(def.name, value, def.usage)
+		}
+	case reflect.String:
+		value := def.val.Interface().(string)
+		if def.short != "" {
+			flags.StringP(def.name, def.short, value, def.usage)
+		} else {
+			flags.String(def.name, value, def.usage)
+		}
+	case reflect.Slice, reflect.Array:
+		if slice, ok := def.val.Interface().([]string); ok {
+			if def.short != "" {
+				flags.StringSliceVarP(&slice, def.name, def.short, slice, def.usage)
+			} else {
+				flags.StringSliceVar(&slice, def.name, slice, def.usage)
+			}
+		} else {
+			log.Error().Msgf("Campo %s non è di tipo []string", def.name)
 		}
 	}
 }
