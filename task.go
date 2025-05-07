@@ -33,7 +33,7 @@ var TaskConfig any
 
 func Execute[T ITaskRunner]() {
 	autoDefineFlags()
-	Task.Flags().IntP("log", "l", 2, "level of logging: -1=trace, 0=debug, 1=info, 2=warn, 3=error")
+	Task.Flags().IntP("log", "l", 1, "level of logging: -1=trace, 0=debug, 1=info, 2=warn, 3=error")
 	Task.Use = AppName
 	Task.Version = BuildVersion
 	Task.Run = func(cmd *cobra.Command, args []string) {
@@ -94,7 +94,15 @@ func autoDefineFlags() {
 				Task.Flags().BoolP(name, short, val.Field(i).Interface().(bool), usage)
 			case reflect.String:
 				Task.Flags().StringP(name, short, val.Field(i).Interface().(string), usage)
+			case reflect.Slice, reflect.Array:
+				if slice, ok := val.Field(i).Interface().([]string); ok {
+					Task.Flags().StringSliceVarP(&slice, name, short, slice, usage)
+				} else {
+					log.Error().Msgf("Campo %s non è di tipo []string", name)
+				}
+
 			}
+
 		} else {
 			switch field.Type.Kind() {
 			case reflect.Int:
@@ -103,6 +111,13 @@ func autoDefineFlags() {
 				Task.Flags().Bool(name, val.Field(i).Interface().(bool), usage)
 			case reflect.String:
 				Task.Flags().String(name, val.Field(i).Interface().(string), usage)
+			case reflect.Slice, reflect.Array:
+				if slice, ok := val.Field(i).Interface().([]string); ok {
+					Task.Flags().StringSliceVar(&slice, name, slice, usage)
+				} else {
+					log.Error().Msgf("Campo %s non è di tipo []string", name)
+				}
+
 			}
 
 		}
