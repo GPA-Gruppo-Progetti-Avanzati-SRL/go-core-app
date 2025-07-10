@@ -50,7 +50,7 @@ func ConvertStringToTimeDate(input string) (time.Time, error) {
 	}
 
 	// Creiamo l'oggetto time.Time con time.Date
-	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.UTC)
+	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
 	return date, nil
 }
 
