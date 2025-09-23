@@ -2,17 +2,19 @@ package core
 
 import (
 	"context"
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
-	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.37.0"
 
-	"go.uber.org/fx"
 	"net/http"
 	_ "net/http/pprof"
+
+	"go.uber.org/fx"
 )
 
 func init() {
