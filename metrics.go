@@ -52,6 +52,7 @@ func NewServerMetrics(lc fx.Lifecycle) *ServerMetrics {
 	s := &ServerMetrics{}
 	srv := http.NewServeMux()
 	srv.Handle("/metrics", promhttp.Handler())
+	srv.Handle("/health", HealthHandler)
 	server := &http.Server{Addr: ":2112", Handler: srv}
 
 	lc.Append(fx.Hook{
