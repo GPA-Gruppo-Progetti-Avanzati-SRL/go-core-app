@@ -2,18 +2,19 @@ package core
 
 import (
 	"fmt"
+	"os"
+	"reflect"
+	"strconv"
+	"strings"
+
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"go.uber.org/fx"
-	"os"
-	"reflect"
-	"strconv"
-	"strings"
 )
 
-func Run[T ITaskRunner](runner T, shutdowner fx.Shutdowner) {
+func Exec[T ITaskRunner](runner T, shutdowner fx.Shutdowner) {
 
 	go func() {
 		log.Info().Msgf("Executing")
@@ -50,8 +51,8 @@ func Execute[T ITaskRunner]() {
 		}
 		Supply(TaskConfig)
 		configureLog(logLevel)
-		Invoke(Run[T])
-		Start()
+		Invoke(Exec[T])
+		Run()
 	}
 	if err := Task.Execute(); err != nil {
 		fmt.Println(err)

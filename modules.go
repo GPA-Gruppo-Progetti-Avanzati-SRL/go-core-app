@@ -1,6 +1,7 @@
 package core
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"runtime"
@@ -91,17 +92,27 @@ func provides() fx.Option {
 	return fx.Options(supply...)
 }
 
-func Start() {
+func Run() {
+	app := configureApp()
+	app.Run()
+}
+
+func Start(ctx context.Context) *fx.App {
+	app := configureApp()
+	app.Start(ctx)
+	return app
+}
+
+func configureApp() *fx.App {
 
 	fmt.Printf("%s\nVersion: %s\nSha: %s\nBuildDate: %s\nRuntime: %s\nOS: %s\nArch: %s\n", string(Logo), BuildVersion, SHA, BuildDate, runtime.Version(), runtime.GOOS, runtime.GOARCH)
 	if Mode != "" {
 		fmt.Printf("Mode: %s\n", Mode)
-
 	}
-	fx.New(
+	return fx.New(
 		fx.WithLogger(fxlogger.WithZerolog(log.Logger)),
 		provides(),
 		populates(),
 		invokes(),
-	).Run()
+	)
 }
