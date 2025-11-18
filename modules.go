@@ -2,17 +2,19 @@ package core
 
 import (
 	"fmt"
+	"os"
+	"runtime"
+
 	"github.com/ipfans/fxlogger"
 	"github.com/rs/zerolog/log"
 	"go.uber.org/fx"
-	"os"
-	"runtime"
 )
 
 var provideslist []interface{}
 var Mode = os.Getenv("MODE")
 var invokelist []fx.Option
 var supply []fx.Option
+var populatelist []interface{}
 
 func ProvidesIf(provide interface{}, acceptedmodes ...string) {
 	for _, item := range acceptedmodes {
@@ -62,6 +64,11 @@ func Invoke(invoke interface{}) {
 	return
 }
 
+func Populate(top interface{}) {
+	populatelist = append(populatelist, top)
+	return
+}
+
 func InvokeIf(invoke interface{}, acceptedmodes ...string) {
 	for _, item := range acceptedmodes {
 		if item == Mode {
@@ -70,8 +77,13 @@ func InvokeIf(invoke interface{}, acceptedmodes ...string) {
 		}
 	}
 }
+
 func invokes() fx.Option {
 	return fx.Options(invokelist...)
+}
+
+func populates() fx.Option {
+	return fx.Populate(provideslist...)
 }
 
 func provides() fx.Option {
@@ -89,6 +101,7 @@ func Start() {
 	fx.New(
 		fx.WithLogger(fxlogger.WithZerolog(log.Logger)),
 		provides(),
+		populates(),
 		invokes(),
 	).Run()
 }
