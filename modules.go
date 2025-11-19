@@ -84,7 +84,7 @@ func invokes() fx.Option {
 }
 
 func populates() fx.Option {
-	return fx.Populate(provideslist...)
+	return fx.Populate(populatelist...)
 }
 
 func provides() fx.Option {
