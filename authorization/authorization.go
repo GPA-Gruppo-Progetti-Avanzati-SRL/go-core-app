@@ -7,10 +7,12 @@ type Authorizer interface {
 	Match(roles []string, operationId string) bool
 
 	// GetCapabilities restituisce l'elenco degli id capability abilitati per i ruoli.
-	GetCapabilities(roles []string) []string
+	// appId è opzionale: se valorizzato, limita le capability all'applicazione indicata.
+	GetCapabilities(roles []string, appId ...string) []string
 
 	// GetMenu restituisce l'albero dei menu autorizzati per i ruoli.
-	GetMenu(roles []string) []*MenuNode
+	// appId è opzionale: se valorizzato, limita il menu all'applicazione indicata.
+	GetMenu(roles []string, appId ...string) []*MenuNode
 
 	HasCapability(roles []string, capabilityId string) bool
 }
