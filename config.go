@@ -46,8 +46,8 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 			return fmt.Errorf("the %s env variable has been set but no file cannot be found at %s", ConfigFileEnvVar, configPath)
 		}
 	} else {
-		log.Warn().Msgf("The config path variable %s has not been set. Reverting to bundled configuration", ConfigFileEnvVar)
-		cfgFileReader = strings.NewReader(projectConfigFile)
+		log.Info().Msgf("The config path variable %s has not been set. Reverting to bundled configuration", ConfigFileEnvVar)
+		cfgFileReader = strings.NewReader(util.ResolveConfigValueToString(projectConfigFile))
 
 		// return nil, fmt.Errorf("the config path variable %s has not been set; please set", ConfigFileEnvVar)
 	}
