@@ -97,10 +97,10 @@ func Run() {
 	app.Run()
 }
 
-func Start(ctx context.Context) *fx.App {
+func Start(ctx context.Context) (*fx.App, error) {
 	app := configureApp()
-	app.Start(ctx)
-	return app
+	err := app.Start(ctx)
+	return app, err
 }
 
 func configureApp() *fx.App {
