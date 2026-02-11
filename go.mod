@@ -3,7 +3,7 @@ module github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app
 go 1.24.0
 
 require (
-	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.89
+	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.92
 	github.com/go-playground/locales v0.14.1
 	github.com/go-playground/universal-translator v0.18.1
 	github.com/go-playground/validator/v10 v10.30.1
