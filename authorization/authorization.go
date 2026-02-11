@@ -7,24 +7,19 @@ type Authorizer interface {
 	Match(roles []string, operationId string) bool
 
 	// GetCapabilities restituisce l'elenco degli id capability abilitati per i ruoli.
-	// appId è opzionale: se valorizzato, limita le capability all'applicazione indicata.
-	GetCapabilities(roles []string, appId ...string) []string
+	GetCapabilities(roles []string, appId string) []string
 
 	// GetMenu restituisce l'albero dei menu autorizzati per i ruoli.
-	// appId è opzionale: se valorizzato, limita il menu all'applicazione indicata.
-	GetMenu(roles []string, appId ...string) []*MenuNode
+	GetMenu(roles []string, appId string) []*MenuNode
 
 	HasCapability(roles []string, capabilityId string) bool
 }
 
 // MenuNode rappresenta un nodo di menu nell'albero autorizzato.
 type MenuNode struct {
-	ID               string      `json:"id"`
-	Description      string      `json:"description,omitempty"`
-	IsLeaf           bool        `json:"isleaf,omitempty"`
-	Icon             string      `json:"icon,omitempty"`
-	Order            int         `json:"order,omitempty"`
-	Endpoint         string      `json:"endpoint,omitempty"`
-	FunctionParentID string      `json:"functionparentid,omitempty"`
-	Children         []*MenuNode `json:"children,omitempty"`
+	ID          string `json:"id"`
+	Description string `json:"description,omitempty"`
+	Icon        string `json:"icon,omitempty"`
+	Order       int    `json:"order,omitempty"`
+	Endpoint    string `json:"endpoint,omitempty"`
 }
