@@ -13,6 +13,8 @@ type Authorizer interface {
 	GetMenu(roles []string, appId string) []*MenuNode
 
 	HasCapability(roles []string, capabilityId string) bool
+
+	GetApps(roles []string) []*App
 }
 
 // MenuNode rappresenta un nodo di menu nell'albero autorizzato.
@@ -21,5 +23,13 @@ type MenuNode struct {
 	Description string `json:"description,omitempty"`
 	Icon        string `json:"icon,omitempty"`
 	Order       int    `json:"order,omitempty"`
-	Endpoint    string `json:"endpoint,omitempty"`
+	Path        string `json:"path,omitempty"`
+}
+
+type App struct {
+	ID          string `json:"id"`
+	Description string `json:"description,omitempty"`
+	Path        string `json:"path,omitempty"`
+	Icon        string `json:"icon,omitempty"`
+	Order       int    `json:"order,omitempty"`
 }
