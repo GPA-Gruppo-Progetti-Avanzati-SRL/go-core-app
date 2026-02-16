@@ -5,25 +5,21 @@ package authorization
 type Authorizer interface {
 	// Match verifica l'autorizzazione su un endpoint identificato da operationId.
 	Match(roles []string, operationId string) bool
-
 	// GetCapabilities restituisce l'elenco degli id capability abilitati per i ruoli.
 	GetCapabilities(roles []string, appId string) []string
-
 	// GetMenu restituisce l'albero dei menu autorizzati per i ruoli.
-	GetMenu(roles []string, appId string) []*MenuNode
-
+	GetPaths(roles []string, appId string) []*Path
 	HasCapability(roles []string, capabilityId string) bool
-
 	GetApps(roles []string) []*App
 }
 
-// MenuNode rappresenta un nodo di menu nell'albero autorizzato.
-type MenuNode struct {
+type Path struct {
 	ID          string `json:"id"`
 	Description string `json:"description,omitempty"`
 	Icon        string `json:"icon,omitempty"`
 	Order       int    `json:"order,omitempty"`
-	Path        string `json:"path,omitempty"`
+	Menu        bool   `json:"ismenu"`
+	Endpoint    string `json:"path,omitempty"`
 }
 
 type App struct {
