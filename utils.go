@@ -2,11 +2,12 @@ package core
 
 import (
 	"fmt"
-	"github.com/rs/zerolog/log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/rs/zerolog/log"
 )
 
 func GetHostname() string {
@@ -159,8 +160,7 @@ func dateToPtr(date *time.Time) *string {
 	if date.IsZero() {
 		return nil
 	}
-	str := date.Format(DateFormat)
-	return &str
+	return new(date.Format(DateFormat))
 }
 
 func GetMidnight(t time.Time) time.Time {
