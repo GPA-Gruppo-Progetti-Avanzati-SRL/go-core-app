@@ -3,19 +3,19 @@ module github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app
 go 1.26.0
 
 require (
-	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.92
+	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.93
 	github.com/go-playground/locales v0.14.1
 	github.com/go-playground/universal-translator v0.18.1
-	github.com/go-playground/validator/v10 v10.30.1
+	github.com/go-playground/validator/v10 v10.30.2
 	github.com/ipfans/fxlogger v0.2.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/rs/zerolog v1.34.0
+	github.com/rs/zerolog v1.35.0
 	github.com/spf13/cobra v1.10.2
 	github.com/spf13/viper v1.21.0
-	go.opentelemetry.io/contrib/exporters/autoexport v0.64.0
-	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.64.0
-	go.opentelemetry.io/contrib/propagators/autoprop v0.64.0
-	go.opentelemetry.io/otel v1.39.0
+	go.opentelemetry.io/contrib/exporters/autoexport v0.67.0
+	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.67.0
+	go.opentelemetry.io/contrib/propagators/autoprop v0.67.0
+	go.opentelemetry.io/otel v1.42.0
 	go.opentelemetry.io/otel/exporters/prometheus v0.61.0
 	go.opentelemetry.io/otel/metric v1.39.0
 	go.opentelemetry.io/otel/sdk v1.39.0
