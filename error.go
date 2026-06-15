@@ -1,5 +1,36 @@
 package core
 
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/rs/zerolog"
+	"github.com/rs/zerolog/log"
+)
+
+type Field struct {
+	Key   string
+	Value any
+}
+
+func F(k string, v any) Field {
+	return Field{Key: k, Value: v}
+}
+
+func (e *ApplicationError) Log(op fmt.Stringer, fields ...Field) {
+	var ev *zerolog.Event
+	if e.StatusCode == http.StatusNotFound {
+		ev = log.Warn().Err(e)
+	} else {
+		ev = log.Error().Err(e)
+	}
+	ev = ev.Str("op", op.String())
+	for _, f := range fields {
+		ev = ev.Interface(f.Key, f.Value)
+	}
+	ev.Send()
+}
+
 type ApplicationError struct {
 	StatusCode int    `json:"-" bson:"statusCode"`
 	Ambit      string `json:"ambit"`
