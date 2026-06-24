@@ -8,6 +8,7 @@ import (
 
 	"github.com/ipfans/fxlogger"
 	"github.com/rs/zerolog/log"
+	_ "go.uber.org/automaxprocs"
 	"go.uber.org/fx"
 )
 
@@ -105,7 +106,7 @@ func Start(ctx context.Context) (*fx.App, error) {
 
 func configureApp() *fx.App {
 
-	fmt.Printf("%s\nVersion: %s\nSha: %s\nBuildDate: %s\nRuntime: %s\nOS: %s\nArch: %s\n", string(Logo), BuildVersion, SHA, BuildDate, runtime.Version(), runtime.GOOS, runtime.GOARCH)
+	fmt.Printf("%s\nVersion: %s\nSha: %s\nBuildDate: %s\nRuntime: %s\nOS: %s\nArch: %s\nGOMAXPROCS: %d\nNumCPU: %d\n", string(Logo), BuildVersion, SHA, BuildDate, runtime.Version(), runtime.GOOS, runtime.GOARCH, runtime.GOMAXPROCS(0), runtime.NumCPU())
 	if Mode != "" {
 		fmt.Printf("Mode: %s\n", Mode)
 	}
