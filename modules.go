@@ -8,7 +8,7 @@ import (
 
 	"github.com/ipfans/fxlogger"
 	"github.com/rs/zerolog/log"
-	_ "go.uber.org/automaxprocs"
+
 	"go.uber.org/fx"
 )
 
