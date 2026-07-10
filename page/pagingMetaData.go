@@ -3,7 +3,6 @@ package page
 import (
 	"errors"
 	"math"
-	"sync"
 
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app"
 )
@@ -12,21 +11,21 @@ const (
 	QP_PageNumber = "pageNumber"
 	QP_PageSize   = "pageSize"
 
-	// DefaultPageSize   = 10
-	// DefaultPageNumber = 1
-	// MaxPageSize       = 15
+	// FallbackMaxPageSize is the application-level safety cap applied when no
+	// per-instance limit is available (Config.MaxPageSize <= 0, or a Paging not
+	// built via InitPaging). Being a const it is immutable and therefore safe
+	// under concurrency by construction. It protects the database from abnormal
+	// page sizes even on a misconfigured service. Note the deliberate exception:
+	// pageSize == 0 means "all items" and bypasses any cap (see Paging()).
+	FallbackMaxPageSize = 100
 )
 
-// These package-level globals are kept only for backward compatibility. They are
-// updated as a side effect of InitPaging and guarded by pagingConfigMu so concurrent
-// InitPaging calls don't data-race on them. New logic must NOT rely on them: the
-// effective limit lives per-instance on Paging.maxPageSize.
-var (
-	pagingConfigMu                                  sync.RWMutex
-	DefaultPageSize, DefaultPageNumber, MaxPageSize int
-)
-
-// Paging metadata
+// Paging metadata.
+//
+// A Paging is not safe for concurrent use: it belongs to a single request.
+// It must be built via InitPaging — do not reconstruct it from the wire
+// (JSON/headers): the unexported per-instance limit is not serialized, so a
+// rebuilt Paging falls back to FallbackMaxPageSize.
 type Paging struct {
 	PageSize    int   `json:"pageSize"`
 	TotalCount  int64 `json:"totalCount"`
@@ -35,37 +34,19 @@ type Paging struct {
 	HasNext     bool  `json:"hasNext"`
 	HasPrevious bool  `json:"hasPrevious"`
 
-	// maxPageSize is the per-instance upper bound for PageSize, captured from the
-	// Config passed to InitPaging. It is unexported (so it is never serialized) and
-	// makes validation independent from the package-level MaxPageSize global, which
-	// is shared across goroutines and caused cross-request "invalid page size"
-	// errors when concurrent requests used different Config.MaxPageSize values.
+	// maxPageSize is the per-instance upper bound for PageSize, captured from
+	// the Config passed to InitPaging. Keeping it per-instance (instead of the
+	// former package-level global rewritten on every InitPaging call) is what
+	// makes validation deterministic under concurrency: requests configured
+	// with different limits can no longer interfere with each other.
 	maxPageSize int
 }
 
-// Paging Request
-
-// Configure default values.
-// Kept only to update the exported package-level globals for backward compatibility
-// with external code that may still read them. InitPaging no longer relies on these
-// globals for its own logic (see below), so it is safe under concurrency.
-func config(pagingConfig *Config) {
-	pagingConfigMu.Lock()
-	defer pagingConfigMu.Unlock()
-	DefaultPageSize = pagingConfig.DefaultPageSize
-	DefaultPageNumber = pagingConfig.DefaultPageNumber
-	MaxPageSize = pagingConfig.MaxPageSize
-}
-
-// Initialize a new Paging Metadata.
-// If pageSize is -1, set default value pagingConfig.DefaultPageSize.
-// If pageNumber is -1, return default value pagingConfig.DefaultPageNumber.
+// InitPaging initializes a new Paging metadata. It is a pure function: it only
+// reads the passed Config and writes the returned struct — no shared state.
+// If pageSize is -1, the default value pagingConfig.DefaultPageSize is used.
+// If pageNumber is -1, the default value pagingConfig.DefaultPageNumber is used.
 func InitPaging(pagingConfig *Config, pageSize, pageNumber int, totalItems int64) *Paging {
-	// Keep the exported globals in sync for backward compatibility only.
-	config(pagingConfig)
-
-	// Resolve defaults from the passed-in config, NOT from the shared globals,
-	// so concurrent callers with different Config values do not interfere.
 	size := pageSize
 	if pageSize == -1 {
 		size = pagingConfig.DefaultPageSize
@@ -238,24 +219,21 @@ func (p *Paging) setHasPrev(hasPrev bool) {
 	p.HasPrevious = hasPrev
 }
 
-// effectiveMaxPageSize returns the per-instance limit captured at InitPaging time.
-// For a Paging not built via InitPaging (maxPageSize == 0) it falls back to the
-// package-level MaxPageSize global to preserve the previous behavior.
-func (p *Paging) effectiveMaxPageSize() int {
-	if p.maxPageSize > 0 {
-		return p.maxPageSize
-	}
-	pagingConfigMu.RLock()
-	defer pagingConfigMu.RUnlock()
-	return MaxPageSize
-}
-
 // Validator for PageSize.
-// Validates against the per-instance limit rather than the shared global, so
-// concurrent requests configured with different MaxPageSize cannot fail each other.
+// Validates against the per-instance limit captured at InitPaging time; when no
+// per-instance limit is set (Config.MaxPageSize <= 0, or a Paging not built via
+// InitPaging) the immutable FallbackMaxPageSize applies, so the upper bound is
+// never unbounded. param == 0 ("all items") deliberately bypasses the cap.
 func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
+	if param < -1 {
+		return core.BusinessErrorWithCodeAndMessage("ERR-PAGESIZE", "invalid page size")
+	}
 
-	if param < -1 || param > p.effectiveMaxPageSize() {
+	max := p.maxPageSize
+	if max <= 0 {
+		max = FallbackMaxPageSize
+	}
+	if param > max {
 		return core.BusinessErrorWithCodeAndMessage("ERR-PAGESIZE", "invalid page size")
 	}
 
