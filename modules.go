@@ -19,6 +19,20 @@ var invokelist []fx.Option
 var supply []fx.Option
 var populatelist []interface{}
 
+// IsMode reports whether the current Mode is among the given modes.
+// With no modes it returns true (i.e. "any mode"), coherently with the *If helpers.
+func IsMode(acceptedmodes ...string) bool {
+	if len(acceptedmodes) == 0 {
+		return true
+	}
+	for _, item := range acceptedmodes {
+		if item == Mode {
+			return true
+		}
+	}
+	return false
+}
+
 func ProvidesIf(provide interface{}, acceptedmodes ...string) {
 	for _, item := range acceptedmodes {
 		if item == Mode {
