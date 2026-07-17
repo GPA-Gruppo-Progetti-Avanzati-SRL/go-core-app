@@ -2,43 +2,15 @@ package core
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"log/slog"
 	"os"
 	"runtime"
 	"runtime/debug"
 
-	"github.com/KimMachineGun/automemlimit/memlimit"
 	"github.com/ipfans/fxlogger"
 	"github.com/rs/zerolog/log"
 	"go.uber.org/fx"
 )
-
-// init imposta GOMEMLIMIT dal limite del cgroup, ma SOLO se il processo gira
-// effettivamente dentro un cgroup con un limite di memoria (tipicamente in
-// container/k8s). Fuori da un cgroup — o su sistemi che non li supportano, es.
-// macOS in sviluppo locale — la libreria non deve emettere l'errore
-// "failed to set GOMEMLIMIT: cgroups is not supported on this system".
-// Per ottenerlo avvolgiamo FromCgroup convertendo "non in un cgroup" in
-// memlimit.ErrNoLimit, che il framework tratta come skip silenzioso.
-func init() {
-	memlimit.SetGoMemLimitWithOpts(
-		memlimit.WithProvider(cgroupOnlyProvider),
-		memlimit.WithLogger(slog.Default()),
-	)
-}
-
-// cgroupOnlyProvider ritorna il limite del cgroup; se il processo non è dentro
-// un cgroup (ErrNoCgroup) o il sistema non li supporta (ErrCgroupsNotSupported)
-// ritorna memlimit.ErrNoLimit invece di propagare l'errore.
-func cgroupOnlyProvider() (uint64, error) {
-	limit, err := memlimit.FromCgroup()
-	if errors.Is(err, memlimit.ErrNoCgroup) || errors.Is(err, memlimit.ErrCgroupsNotSupported) {
-		return 0, memlimit.ErrNoLimit
-	}
-	return limit, err
-}
 
 var provideslist []interface{}
 var Mode = os.Getenv("MODE")
