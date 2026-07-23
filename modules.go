@@ -75,6 +75,32 @@ func Provides(methods ...interface{}) {
 	}
 }
 
+// Provide registra ctor annotandolo per essere fornito As l'interfaccia T.
+// Equivale a Provides(fx.Annotate(ctor, fx.As(new(T)))).
+func Provide[T any](ctor interface{}) {
+	Provides(fx.Annotate(ctor, fx.As(new(T))))
+}
+
+// ProvideIf è Provide, gated sul Mode corrente (usa IsMode).
+func ProvideIf[T any](ctor interface{}, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		Provide[T](ctor)
+	}
+}
+
+// ProvideAndSupply registra ctor As T e fa Supply del valore dato.
+func ProvideAndSupply[T any](ctor interface{}, supply interface{}) {
+	Provide[T](ctor)
+	Supply(supply)
+}
+
+// ProvideAndSupplyIf è ProvideAndSupply, gated sul Mode corrente (usa IsMode).
+func ProvideAndSupplyIf[T any](ctor interface{}, supply interface{}, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		ProvideAndSupply[T](ctor, supply)
+	}
+}
+
 func Invoke(invoke interface{}) {
 	invokelist = append(invokelist, fx.Invoke(invoke))
 	return
