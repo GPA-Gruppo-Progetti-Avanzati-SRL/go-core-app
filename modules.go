@@ -19,7 +19,8 @@ var invokelist []fx.Option
 var supply []fx.Option
 var populatelist []any
 
-type In fx.In
+type In = fx.In
+type Out = fx.Out
 
 // IsMode reports whether the current Mode is among the given modes.
 // With no modes it returns true (i.e. "any mode"), coherently with the *If helpers.
