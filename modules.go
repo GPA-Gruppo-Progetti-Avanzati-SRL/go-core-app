@@ -6,17 +6,18 @@ import (
 	"os"
 	"runtime"
 	"runtime/debug"
+	"slices"
 
 	"github.com/ipfans/fxlogger"
 	"github.com/rs/zerolog/log"
 	"go.uber.org/fx"
 )
 
-var provideslist []interface{}
+var provideslist []any
 var Mode = os.Getenv("MODE")
 var invokelist []fx.Option
 var supply []fx.Option
-var populatelist []interface{}
+var populatelist []any
 
 // IsMode reports whether the current Mode is among the given modes.
 // With no modes it returns true (i.e. "any mode"), coherently with the *If helpers.
@@ -24,99 +25,91 @@ func IsMode(acceptedmodes ...string) bool {
 	if len(acceptedmodes) == 0 {
 		return true
 	}
-	for _, item := range acceptedmodes {
-		if item == Mode {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(acceptedmodes, Mode)
 }
 
-func ProvidesIf(provide interface{}, acceptedmodes ...string) {
-	for _, item := range acceptedmodes {
-		if item == Mode {
-			provideslist = append(provideslist, provide)
-			return
-		}
+func ProvideIf(provide any, acceptedmodes ...string) {
+	if slices.Contains(acceptedmodes, Mode) {
+		provideslist = append(provideslist, provide)
+		return
 	}
 
 }
 
-func Supply(ifaces ...interface{}) {
+func Supply(ifaces ...any) {
 	for _, iface := range ifaces {
 		supply = append(supply, fx.Supply(iface))
 	}
 }
 
-func SupplyIf(iface interface{}, acceptedmodes ...string) {
-	for _, item := range acceptedmodes {
-		if item == Mode {
-			supply = append(supply, fx.Supply(iface))
-			return
-		}
+func SupplyIf(iface any, acceptedmodes ...string) {
+	if slices.Contains(acceptedmodes, Mode) {
+		supply = append(supply, fx.Supply(iface))
+		return
 	}
 }
 
-func ProvidesAndSupplyIf(provide interface{}, supply interface{}, acceptedmodes ...string) {
+func ProvideAndSupplyIf(provide any, supply any, acceptedmodes ...string) {
 
-	for _, item := range acceptedmodes {
-		if item == Mode {
-			Provides(provide)
-			Supply(supply)
-			return
-		}
+	if slices.Contains(acceptedmodes, Mode) {
+		Provides(provide)
+		Supply(supply)
+		return
 	}
 
 }
 
-func Provides(methods ...interface{}) {
+func Provides(methods ...any) {
 	for _, item := range methods {
 		provideslist = append(provideslist, item)
 	}
 }
 
-// Provide registra ctor annotandolo per essere fornito As l'interfaccia T.
-// Equivale a Provides(fx.Annotate(ctor, fx.As(new(T)))).
-func Provide[T any](ctor interface{}) {
+// ProvideInterface registra ctor annotandolo per essere fornito come
+// l'interfaccia T, eliminando il boilerplate fx.Annotate(ctor, fx.As(new(T))).
+// Il costruttore si passa nudo; l'interfaccia è il type parameter.
+//
+//	core.ProvideInterface[IData](NewData)
+func ProvideInterface[T any](ctor any) {
 	Provides(fx.Annotate(ctor, fx.As(new(T))))
 }
 
-// ProvideIf è Provide, gated sul Mode corrente (usa IsMode).
-func ProvideIf[T any](ctor interface{}, acceptedmodes ...string) {
+// ProvideInterfaceIf è ProvideInterface, gated sul Mode corrente (usa IsMode).
+func ProvideInterfaceIf[T any](ctor any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
-		Provide[T](ctor)
+		ProvideInterface[T](ctor)
 	}
 }
 
-// ProvideAndSupply registra ctor As T e fa Supply del valore dato.
-func ProvideAndSupply[T any](ctor interface{}, supply interface{}) {
-	Provide[T](ctor)
+// ProvideInterfaceAndSupply registra ctor come interfaccia T e fa Supply del valore dato.
+func ProvideInterfaceAndSupply[T any](ctor any, supply any) {
+	ProvideInterface[T](ctor)
 	Supply(supply)
 }
 
-// ProvideAndSupplyIf è ProvideAndSupply, gated sul Mode corrente (usa IsMode).
-func ProvideAndSupplyIf[T any](ctor interface{}, supply interface{}, acceptedmodes ...string) {
+// ProvideInterfaceAndSupplyIf è ProvideInterfaceAndSupply, gated sul Mode corrente (usa IsMode).
+//
+//	core.ProvideInterfaceAndSupplyIf[IClient](NewService, &cfg.C, engine.Batch, engine.Worker, engine.Api)
+func ProvideInterfaceAndSupplyIf[T any](ctor any, supply any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
-		ProvideAndSupply[T](ctor, supply)
+		ProvideInterfaceAndSupply[T](ctor, supply)
 	}
 }
 
-func Invoke(invoke interface{}) {
+func Invoke(invoke any) {
 	invokelist = append(invokelist, fx.Invoke(invoke))
 	return
 }
 
-func Populate(top interface{}) {
+func Populate(top any) {
 	populatelist = append(populatelist, top)
 	return
 }
 
-func InvokeIf(invoke interface{}, acceptedmodes ...string) {
-	for _, item := range acceptedmodes {
-		if item == Mode {
-			invokelist = append(invokelist, fx.Invoke(invoke))
-			return
-		}
+func InvokeIf(invoke any, acceptedmodes ...string) {
+	if slices.Contains(acceptedmodes, Mode) {
+		invokelist = append(invokelist, fx.Invoke(invoke))
+		return
 	}
 }
 
