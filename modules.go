@@ -28,88 +28,66 @@ func IsMode(acceptedmodes ...string) bool {
 	return slices.Contains(acceptedmodes, Mode)
 }
 
-func ProvideIf(provide any, acceptedmodes ...string) {
-	if slices.Contains(acceptedmodes, Mode) {
+// Provide registra un costruttore/valore. Se acceptedmodes è vuoto registra
+// sempre; altrimenti solo se Mode è tra quelli indicati.
+//
+//	core.Provide(NewData)              // sempre
+//	core.Provide(NewData, "batch")     // solo in mode "batch"
+func Provide(provide any, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
 		provideslist = append(provideslist, provide)
-		return
-	}
-
-}
-
-func Supply(ifaces ...any) {
-	for _, iface := range ifaces {
-		supply = append(supply, fx.Supply(iface))
 	}
 }
 
-func SupplyIf(iface any, acceptedmodes ...string) {
-	if slices.Contains(acceptedmodes, Mode) {
-		supply = append(supply, fx.Supply(iface))
-		return
-	}
-}
-
-func ProvideAndSupplyIf(provide any, supply any, acceptedmodes ...string) {
-
-	if slices.Contains(acceptedmodes, Mode) {
-		Provides(provide)
-		Supply(supply)
-		return
-	}
-
-}
-
-func Provides(methods ...any) {
-	for _, item := range methods {
-		provideslist = append(provideslist, item)
-	}
-}
-
-// ProvideInterface registra ctor annotandolo per essere fornito come
-// l'interfaccia T, eliminando il boilerplate fx.Annotate(ctor, fx.As(new(T))).
-// Il costruttore si passa nudo; l'interfaccia è il type parameter.
-//
-//	core.ProvideInterface[IData](NewData)
-func ProvideInterface[T any](ctor any) {
-	Provides(fx.Annotate(ctor, fx.As(new(T))))
-}
-
-// ProvideInterfaceIf è ProvideInterface, gated sul Mode corrente (usa IsMode).
-func ProvideInterfaceIf[T any](ctor any, acceptedmodes ...string) {
+// Supply registra un valore già istanziato. acceptedmodes opzionale come in Provide.
+func Supply(value any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
-		ProvideInterface[T](ctor)
+		supply = append(supply, fx.Supply(value))
 	}
 }
 
-// ProvideInterfaceAndSupply registra ctor come interfaccia T e fa Supply del valore dato.
-func ProvideInterfaceAndSupply[T any](ctor any, supply any) {
-	ProvideInterface[T](ctor)
-	Supply(supply)
-}
-
-// ProvideInterfaceAndSupplyIf è ProvideInterfaceAndSupply, gated sul Mode corrente (usa IsMode).
+// ProvideAs registra ctor annotandolo per essere fornito come l'interfaccia T,
+// eliminando il boilerplate fx.Annotate(ctor, fx.As(new(T))). Il costruttore si
+// passa nudo; l'interfaccia è il type parameter. acceptedmodes opzionale.
 //
-//	core.ProvideInterfaceAndSupplyIf[IClient](NewService, &cfg.C, engine.Batch, engine.Worker, engine.Api)
-func ProvideInterfaceAndSupplyIf[T any](ctor any, supply any, acceptedmodes ...string) {
+//	core.ProvideAs[IData](NewData)
+//	core.ProvideAs[IData](NewData, engine.Batch, engine.Worker)
+func ProvideAs[T any](ctor any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
-		ProvideInterfaceAndSupply[T](ctor, supply)
+		Provide(fx.Annotate(ctor, fx.As(new(T))))
 	}
 }
 
-func Invoke(invoke any) {
-	invokelist = append(invokelist, fx.Invoke(invoke))
-	return
+// ProvideWith registra un costruttore insieme al valore (tipicamente il config)
+// che consuma, in un'unica chiamata. acceptedmodes opzionale.
+func ProvideWith(provide any, value any, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		Provide(provide)
+		Supply(value)
+	}
 }
 
-func Populate(top any) {
-	populatelist = append(populatelist, top)
-	return
+// ProvideAsWith è ProvideWith con il costruttore registrato come l'interfaccia T.
+//
+//	core.ProvideAsWith[IClient](NewService, &cfg.C, engine.Batch, engine.Worker, engine.Api)
+func ProvideAsWith[T any](ctor any, value any, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		ProvideAs[T](ctor)
+		Supply(value)
+	}
 }
 
-func InvokeIf(invoke any, acceptedmodes ...string) {
-	if slices.Contains(acceptedmodes, Mode) {
+// Invoke registra una funzione eseguita all'avvio (side-effect). acceptedmodes opzionale.
+func Invoke(invoke any, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
 		invokelist = append(invokelist, fx.Invoke(invoke))
-		return
+	}
+}
+
+// Populate registra un target per fx.Populate. acceptedmodes opzionale.
+func Populate(top any, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		populatelist = append(populatelist, top)
 	}
 }
 
