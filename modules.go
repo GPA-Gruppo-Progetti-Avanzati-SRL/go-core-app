@@ -79,6 +79,49 @@ func ProvideAsWith[T any](ctor any, value any, acceptedmodes ...string) {
 	}
 }
 
+// ProvideNamed registra ctor annotandolo con un nome (fx.ResultTags(`name:"..."`)),
+// eliminando il boilerplate fx.Annotate(ctor, fx.ResultTags(`name:"..."`)). Il
+// costruttore si passa nudo come primo parametro; acceptedmodes opzionale.
+//
+//	core.ProvideNamed(locker.NewCatalogoLocker, "catalogo")
+//	core.ProvideNamed(locker.NewJobLocker, "job", engine.Batch)
+func ProvideNamed(ctor any, name string, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		Provide(fx.Annotate(ctor, fx.ResultTags(`name:"`+name+`"`)))
+	}
+}
+
+// ProvideNamedWith è ProvideNamed con il valore (tipicamente il config) che il
+// costruttore consuma, fornito nella stessa chiamata (posizione coerente con ProvideWith).
+//
+//	core.ProvideNamedWith(mngr.NewClient, &cfg.MngrConfig, "mngr")
+func ProvideNamedWith(ctor any, name string, value any, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		ProvideNamed(ctor, name)
+		Supply(value)
+	}
+}
+
+// ProvideAsNamed registra ctor annotandolo sia come interfaccia T (fx.As) sia con
+// un nome (fx.ResultTags), combinando ProvideAs e ProvideNamed.
+//
+//	core.ProvideAsNamed[IClient](svc.New, "primary")
+func ProvideAsNamed[T any](ctor any, name string, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		Provide(fx.Annotate(ctor, fx.As(new(T)), fx.ResultTags(`name:"`+name+`"`)))
+	}
+}
+
+// ProvideAsNamedWith è ProvideAsNamed con il valore consumato dal costruttore.
+//
+//	core.ProvideAsNamedWith[IClient](svc.New, &cfg.C, "primary")
+func ProvideAsNamedWith[T any](ctor any, name string, value any, acceptedmodes ...string) {
+	if IsMode(acceptedmodes...) {
+		ProvideAsNamed[T](ctor, name)
+		Supply(value)
+	}
+}
+
 // Invoke registra una funzione eseguita all'avvio (side-effect). acceptedmodes opzionale.
 func Invoke(invoke any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
