@@ -18,6 +18,18 @@ var Mode = os.Getenv("MODE")
 var invokelist []fx.Option
 var supply []fx.Option
 var populatelist []any
+var modulelist []fx.Option
+
+// moduleScope raccoglie le registrazioni fatte dentro una chiamata Module(). current
+// punta allo scope attivo (nil = scope root, liste globali). La registrazione avviene
+// tutta in init() single-thread, quindi lo stato globale è sicuro.
+type moduleScope struct {
+	provides []any
+	supplies []fx.Option
+	invokes  []fx.Option
+}
+
+var current *moduleScope
 
 type In = fx.In
 type Out = fx.Out
@@ -38,15 +50,54 @@ func IsMode(acceptedmodes ...string) bool {
 //	core.Provide(NewData, "batch")     // solo in mode "batch"
 func Provide(provide any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
-		provideslist = append(provideslist, provide)
+		if current != nil {
+			current.provides = append(current.provides, provide)
+		} else {
+			provideslist = append(provideslist, provide)
+		}
 	}
 }
 
 // Supply registra un valore già istanziato. acceptedmodes opzionale come in Provide.
 func Supply(value any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
-		supply = append(supply, fx.Supply(value))
+		if current != nil {
+			current.supplies = append(current.supplies, fx.Supply(value))
+		} else {
+			supply = append(supply, fx.Supply(value))
+		}
 	}
+}
+
+// Module raggruppa in un fx.Module(name) tutte le registrazioni (Provide/Supply/Invoke,
+// e i loro wrapper ProvideAs/ProvideNamed/...) effettuate dentro register. Serve solo per
+// il namespacing del grafo/log fx: i provide NON sono privati (nessun fx.Private), quindi
+// restano visibili all'intera app e i value group aggregano come prima (un consumer nel
+// modulo vede anche i produttori a root/antenati). Il mode-gating resta per-registrazione
+// (ogni Provide/Supply gate-a con IsMode prima di finire nello scope). Le chiamate fuori da
+// Module continuano a registrare nello scope root, quindi è retrocompatibile.
+//
+//	core.Module("batch", func() { storemongo.Module(); scheduler.Module(cfg) })
+func Module(name string, register func()) {
+	prev := current
+	ms := &moduleScope{}
+	current = ms
+	register()
+	current = prev
+
+	// Nessuna registrazione (es. tutti i componenti gate-ati via dal mode corrente):
+	// niente fx.Module vuoto, per non sporcare grafo/log fx.
+	if len(ms.provides) == 0 && len(ms.supplies) == 0 && len(ms.invokes) == 0 {
+		return
+	}
+
+	opts := make([]fx.Option, 0, len(ms.supplies)+len(ms.invokes)+1)
+	opts = append(opts, ms.supplies...)
+	if len(ms.provides) > 0 {
+		opts = append(opts, fx.Provide(ms.provides...))
+	}
+	opts = append(opts, ms.invokes...)
+	modulelist = append(modulelist, fx.Module(name, opts...))
 }
 
 // ProvideAs registra ctor annotandolo per essere fornito come l'interfaccia T,
@@ -126,7 +177,11 @@ func ProvideAsNamedWith[T any](ctor any, name string, value any, acceptedmodes .
 // Invoke registra una funzione eseguita all'avvio (side-effect). acceptedmodes opzionale.
 func Invoke(invoke any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
-		invokelist = append(invokelist, fx.Invoke(invoke))
+		if current != nil {
+			current.invokes = append(current.invokes, fx.Invoke(invoke))
+		} else {
+			invokelist = append(invokelist, fx.Invoke(invoke))
+		}
 	}
 }
 
@@ -172,5 +227,6 @@ func configureApp() *fx.App {
 		provides(),
 		populates(),
 		invokes(),
+		fx.Options(modulelist...),
 	)
 }

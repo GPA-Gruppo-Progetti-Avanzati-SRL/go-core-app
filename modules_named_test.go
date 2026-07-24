@@ -21,6 +21,8 @@ func resetLists() {
 	invokelist = nil
 	supply = nil
 	populatelist = nil
+	modulelist = nil
+	current = nil
 }
 
 func TestProvideNamed(t *testing.T) {
