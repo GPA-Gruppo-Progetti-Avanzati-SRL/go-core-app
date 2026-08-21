@@ -15,7 +15,7 @@ const ErrValidation = "ERR_VALIDATION"
 var Validator = validator.New()
 var Translator = ut.New(it.New(), it.New())
 
-func ValidateStruct(i interface{}) *ApplicationError {
+func ValidateStruct(i any) *ApplicationError {
 
 	if verr := Validator.Struct(i); verr != nil {
 		var errorMessages []string

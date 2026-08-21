@@ -284,8 +284,7 @@ func matchGlob(pattern, path string) bool {
 	if pattern == path {
 		return true
 	}
-	if strings.HasSuffix(pattern, "/**") {
-		prefix := strings.TrimSuffix(pattern, "/**")
+	if prefix, ok := strings.CutSuffix(pattern, "/**"); ok {
 		return path == prefix || strings.HasPrefix(path, prefix+"/")
 	}
 	pp := strings.Split(strings.Trim(pattern, "/"), "/")

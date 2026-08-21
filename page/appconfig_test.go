@@ -60,14 +60,12 @@ func TestAppConfigLifecycle(t *testing.T) {
 	t.Run("concurrent readers", func(t *testing.T) {
 		// Run with -race: lock-free reads while paging concurrently.
 		var wg sync.WaitGroup
-		for i := 0; i < 100; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		for range 100 {
+			wg.Go(func() {
 				if _, err := InitPaging(AppConfig(), 10, 1, 0).Paging(); err != nil {
 					t.Errorf("unexpected error: %v", err)
 				}
-			}()
+			})
 		}
 		wg.Wait()
 	})

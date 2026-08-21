@@ -89,9 +89,10 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 
 	if !config.Log.EnableJSON {
 		zerolog.TimeFieldFormat = DateTimeZoneFormat
-		output := zerolog.ConsoleWriter{Out: os.Stdout, TimeFormat: DateTimeZoneFormat}
-		output.FormatFieldName = func(i interface{}) string {
-			return fmt.Sprintf("%s:", i)
+		output := zerolog.ConsoleWriter{
+			Out:             os.Stdout,
+			TimeFormat:      DateTimeZoneFormat,
+			FormatFieldName: func(i any) string { return fmt.Sprintf("%s:", i) },
 		}
 		log.Logger = zerolog.New(output).With().Timestamp().Logger()
 	} else {

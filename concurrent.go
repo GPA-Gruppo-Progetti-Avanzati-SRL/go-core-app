@@ -30,7 +30,6 @@ func ConcurrentN[T, R any](items []T, concurrency int, fn func(T) (R, *Applicati
 	chs := make([]<-chan asyncResult[R], len(items))
 	sem := make(chan struct{}, concurrency)
 	for i, item := range items {
-		i, item := i, item
 		sem <- struct{}{}
 		ch := make(chan asyncResult[R], 1)
 		chs[i] = ch

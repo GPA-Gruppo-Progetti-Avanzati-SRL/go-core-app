@@ -15,7 +15,7 @@ func TestInitPagingConcurrentDifferentConfigs(t *testing.T) {
 	large := &Config{DefaultPageSize: 10, DefaultPageNumber: 1, MaxPageSize: 100}
 
 	var wg sync.WaitGroup
-	for i := 0; i < 200; i++ {
+	for range 200 {
 		wg.Add(2)
 
 		// Emulates GetOperazioneAttiva: only ever asks for a single item.
