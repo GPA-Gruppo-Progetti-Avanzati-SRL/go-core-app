@@ -4,8 +4,6 @@ import (
 	"fmt"
 	"reflect"
 	"strings"
-
-	"github.com/rs/zerolog/log"
 )
 
 // Tag riconosciuti sui campi DIPENDENZA di una struct fornita a ProvideStruct. Sono tag GPA: il
@@ -34,6 +32,10 @@ var (
 //	`inject:` / `from:` / `optional:`  → dipendenza: dig la vede (tradotta nei suoi tag)
 //	`prop:`                            → property: invisibile a dig, riempita da BindProps
 //	nessun tag                         → campo di lavorazione: ignorato, resta al valore zero
+//
+// La struct NON deve embeddare core.In (è un errore al wiring): il marker lo porta il param object
+// sintetico, e accettarlo lascerebbe passare struct scritte per la vecchia semantica, con le
+// dipendenze non taggate silenziosamente a nil.
 //
 //	type importRunner struct {
 //	    Data   IData   `inject:"primary"`
@@ -165,20 +167,19 @@ func synthCtor(t, resultType reflect.Type, group, owner string, props Properties
 }
 
 // collectDeps applica il contratto sui campi di t e ritorna le sole dipendenze, con il tag già
-// tradotto per dig. Una struct che embedda core.In resta sulla semantica storica (vedi legacyDep).
+// tradotto per dig.
 func collectDeps(t reflect.Type, owner string) ([]dep, error) {
-	legacy := embedsIn(t)
-	if legacy {
-		log.Warn().Str("type", t.String()).
-			Msg("core.In in una struct fornita a ProvideStruct: semantica legacy (ogni campo esportato è una dipendenza). Rimuovere core.In e taggare le dipendenze con `inject:`")
+	// core.In è il marker di dig e qui non ha senso: il param object lo mette il synthor. Se lo
+	// accettassimo, una struct scritta per la vecchia semantica (dipendenze non taggate) vedrebbe i
+	// suoi campi trattati come stato interno e resterebbe con le dipendenze a nil, senza che nulla
+	// fallisca. Meglio un errore che dice cosa fare.
+	if embedsIn(t) {
+		return nil, fmt.Errorf("la struct non deve embeddare core.In: le dipendenze si dichiarano col tag `inject:\"\"` (`inject:\"nome\"` per una dipendenza named, `from:\"gruppo\"` per un value group). core.In resta valido nei param object dei costruttori scritti a mano passati a core.Provide")
 	}
 
 	var deps []dep
 	for i := 0; i < t.NumField(); i++ {
 		f := t.Field(i)
-		if f.Type == inType {
-			continue // marker core.In: non è una dipendenza
-		}
 		_, isProp := f.Tag.Lookup(PropTag)
 		injectVal, hasInject := f.Tag.Lookup(InjectTag)
 		fromVal, hasFrom := f.Tag.Lookup(FromTag)
@@ -197,7 +198,7 @@ func collectDeps(t reflect.Type, owner string) ([]dep, error) {
 			}
 			continue // non esportato: campo di lavorazione
 		}
-		if !legacy && !hasInject && !hasFrom && !isOptional {
+		if !hasInject && !hasFrom && !isOptional {
 			continue // nessun tag: campo di lavorazione, dig non lo vede
 		}
 		if hasFrom && injectVal != "" {
@@ -208,26 +209,20 @@ func collectDeps(t reflect.Type, owner string) ([]dep, error) {
 			return nil, fmt.Errorf("campo %s: il tag %q richiede il nome del value group", f.Name, FromTag)
 		}
 
-		tag := f.Tag // legacy: i tag dig si ricopiano verbatim
-		group := f.Tag.Get("group")
-		optional := f.Tag.Get("optional") == "true"
-		if !legacy {
-			var parts []string
-			if injectVal != "" {
-				parts = append(parts, `name:"`+injectVal+`"`)
-			}
-			if fromVal != "" {
-				parts = append(parts, `group:"`+fromVal+`"`)
-			}
-			if isOptional {
-				parts = append(parts, `optional:"true"`)
-			}
-			tag = reflect.StructTag(strings.Join(parts, " "))
-			group, optional = fromVal, isOptional
+		var parts []string
+		if injectVal != "" {
+			parts = append(parts, `name:"`+injectVal+`"`)
 		}
+		if fromVal != "" {
+			parts = append(parts, `group:"`+fromVal+`"`)
+		}
+		if isOptional {
+			parts = append(parts, `optional:"true"`)
+		}
+		tag := reflect.StructTag(strings.Join(parts, " "))
 
 		d := dep{idx: i, tag: tag}
-		if checkableDep(f.Type, group, optional) {
+		if checkableDep(f.Type, fromVal, isOptional) {
 			// La rendiamo opzionale per dig e la verifichiamo noi, per poter dare un errore che nomina
 			// owner/campo/tipo invece del generico makeFuncStub.
 			d.tag = reflect.StructTag(strings.TrimSpace(string(tag) + ` optional:"true"`))
@@ -238,8 +233,8 @@ func collectDeps(t reflect.Type, owner string) ([]dep, error) {
 	return deps, nil
 }
 
-// embedsIn indica se t porta il marker core.In (fx.In), che seleziona la semantica legacy: ogni campo
-// esportato non-`prop:` è una dipendenza e i tag dig vengono ricopiati verbatim.
+// embedsIn indica se t porta il marker core.In (fx.In), che in una struct data a ProvideStruct è un
+// errore: il param object sintetico è quello a portare il marker.
 func embedsIn(t reflect.Type) bool {
 	for i := 0; i < t.NumField(); i++ {
 		if t.Field(i).Type == inType {

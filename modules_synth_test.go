@@ -227,34 +227,23 @@ func TestSynthCtor_FailFastOnInvalidProperty(t *testing.T) {
 	}
 }
 
-// Modalità legacy: una struct che embedda core.In mantiene la semantica storica — ogni campo esportato
-// non-`prop:` è una dipendenza e i tag dig sono ricopiati verbatim.
-type legacyTarget struct {
+// core.In in una struct data a ProvideStruct è un errore: accettarlo lascerebbe passare le struct
+// scritte per la vecchia semantica, con le dipendenze non taggate silenziosamente a nil.
+type coreInTarget struct {
 	In
-	Dep        *fakeDep
-	Optional   *fakeDep `name:"secondary" optional:"true"`
-	Collection string   `prop:"collection" default:"eventi"`
+	Dep *fakeDep
 }
 
-func TestSynthCtor_LegacyCoreInSemantics(t *testing.T) {
-	var got *legacyTarget
-	app := fx.New(
-		fx.NopLogger,
-		fx.Supply(&fakeDep{name: "svc"}),
-		fx.Provide(synthFor[legacyTarget](t, "test", nil, testGroup)),
-		fx.Invoke(func(p regParams) { got = p.Regs[0].Target.(*legacyTarget) }),
-	)
-	if err := app.Err(); err != nil {
-		t.Fatalf("la semantica legacy deve continuare a funzionare: %v", err)
+func TestSynthCtor_RejectsCoreIn(t *testing.T) {
+	_, err := synthCtor(reflect.TypeFor[coreInTarget](), reflect.TypeFor[testReg](), testGroup, "test", nil,
+		func(any) any { return testReg{} })
+	if err == nil {
+		t.Fatal("atteso errore per una struct che embedda core.In")
 	}
-	if got.Dep == nil || got.Dep.name != "svc" {
-		t.Fatalf("dipendenza legacy senza tag non iniettata: %+v", got)
-	}
-	if got.Optional != nil {
-		t.Fatal("i tag dig legacy (name+optional) devono essere preservati")
-	}
-	if got.Collection != "eventi" {
-		t.Fatalf("property non mappata in legacy: %q", got.Collection)
+	for _, want := range []string{"core.In", "inject"} {
+		if !strings.Contains(err.Error(), want) {
+			t.Fatalf("l'errore deve spiegare cosa fare (%q): %v", want, err)
+		}
 	}
 }
 
