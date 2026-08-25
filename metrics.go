@@ -3,6 +3,9 @@ package core
 import (
 	"context"
 
+	"net/http"
+	_ "net/http/pprof"
+
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
@@ -11,13 +14,10 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 
-	"net/http"
-	_ "net/http/pprof"
-
 	"go.uber.org/fx"
 )
 
-func init() {
+func NewServerMetrics(lc fx.Lifecycle) {
 
 	promExporter, err := prometheus.New(prometheus.WithoutScopeInfo())
 	if err != nil {
@@ -39,17 +39,7 @@ func init() {
 		metric.WithResource(res),
 	)
 
-	provider.Meter(AppName)
-
 	otel.SetMeterProvider(provider)
-
-}
-
-type ServerMetrics struct {
-}
-
-func NewServerMetrics(lc fx.Lifecycle) *ServerMetrics {
-	s := &ServerMetrics{}
 	srv := http.NewServeMux()
 	srv.Handle("/metrics", promhttp.Handler())
 	srv.Handle("/health", HealthHandler)
@@ -74,5 +64,5 @@ func NewServerMetrics(lc fx.Lifecycle) *ServerMetrics {
 			return nil
 		},
 	})
-	return s
+	return
 }

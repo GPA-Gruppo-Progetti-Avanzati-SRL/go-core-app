@@ -201,16 +201,47 @@ func populates() fx.Option {
 }
 
 func provides() fx.Option {
-	supply = append(supply, fx.Provide(provideslist...))
-	return fx.Options(supply...)
+	// Buffer locale: usare la globale supply come accumulatore renderebbe provides() non
+	// idempotente (un secondo configureApp fornirebbe due volte gli stessi costruttori).
+	opts := make([]fx.Option, 0, len(supply)+1)
+	opts = append(opts, supply...)
+	if len(provideslist) > 0 {
+		opts = append(opts, fx.Provide(provideslist...))
+	}
+	return fx.Options(opts...)
 }
 
-func Run() {
+// RunOption è un componente standard che l'app abilita al momento di Run. Registra come le altre
+// (Provide/Invoke), quindi vale il solito gating per mode.
+type RunOption func()
+
+// WithTracing abilita il TracerProvider OpenTelemetry.
+//
+//	core.Run(core.WithTracing())
+func WithTracing(acceptedmodes ...string) RunOption {
+	return func() { Invoke(NewTracer, acceptedmodes...) }
+}
+
+// WithServerMetrics espone /metrics e /health su :2112. Da NON abilitare in mode API: go-core-api
+// serve già entrambi sulla porta dell'API, e i due server esporrebbero le stesse metriche.
+//
+//	core.Run(core.WithServerMetrics(engine.Scheduler, engine.Worker))
+func WithServerMetrics(acceptedmodes ...string) RunOption {
+	return func() { Invoke(NewServerMetrics, acceptedmodes...) }
+}
+
+func Run(opts ...RunOption) {
+	for _, o := range opts {
+		o()
+	}
 	app := configureApp()
 	app.Run()
 }
 
-func Start(ctx context.Context) (*fx.App, error) {
+func Start(ctx context.Context, opts ...RunOption) (*fx.App, error) {
+	for _, o := range opts {
+		o()
+	}
 	app := configureApp()
 	err := app.Start(ctx)
 	return app, err
