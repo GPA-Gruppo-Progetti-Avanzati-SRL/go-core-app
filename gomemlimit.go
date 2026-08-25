@@ -16,12 +16,15 @@ import (
 // macOS in sviluppo locale — la libreria non deve emettere l'errore
 // "failed to set GOMEMLIMIT: cgroups is not supported on this system".
 // Per ottenerlo avvolgiamo FromCgroup convertendo "non in un cgroup" in
-// memlimit.ErrNoLimit, che il framework tratta come skip silenzioso.
+// memlimit.ErrNoLimit, che memlimit.Set tratta come successo impostando
+// GOMEMLIMIT a math.MaxInt64 (cioè il default di Go: nessun limite).
 //
 // Tutto il logging della libreria è instradato su zerolog a livello trace,
-// così non appare al livello di log di default.
+// così non appare al livello di log di default: l'eventuale errore di Set è
+// già loggato da memlimit tramite quel logger, e non è fatale — GOMEMLIMIT
+// resta al valore precedente.
 func init() {
-	memlimit.SetGoMemLimitWithOpts(
+	memlimit.Set(
 		memlimit.WithProvider(cgroupOnlyProvider),
 		memlimit.WithLogger(slog.New(zerologTraceHandler{logger: log.Logger})),
 	)
