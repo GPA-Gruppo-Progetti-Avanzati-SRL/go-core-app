@@ -2,10 +2,7 @@ package core
 
 import (
 	"context"
-	"fmt"
 	"os"
-	"runtime"
-	"runtime/debug"
 	"slices"
 
 	"github.com/ipfans/fxlogger"
@@ -249,10 +246,6 @@ func Start(ctx context.Context, opts ...RunOption) (*fx.App, error) {
 
 func configureApp() *fx.App {
 
-	fmt.Printf("%s\nVersion: %s\nSha: %s\nBuildDate: %s\nRuntime: %s\nOS: %s\nArch: %s\nNumCPU: %d\nGOMAXPROCS: %d\nGOMEMLIMIT=%s\n", string(Logo), BuildVersion, SHA, BuildDate, runtime.Version(), runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), runtime.GOMAXPROCS(0), FormatBytes(debug.SetMemoryLimit(-1)))
-	if Mode != "" {
-		fmt.Printf("Mode: %s\n", Mode)
-	}
 	return fx.New(
 		fx.WithLogger(fxlogger.WithZerolog(log.Logger)),
 		provides(),

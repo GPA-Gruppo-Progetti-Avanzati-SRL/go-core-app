@@ -1,6 +1,8 @@
 package core
 
 import (
+	"fmt"
+	"runtime"
 	"runtime/debug"
 
 	"github.com/rs/zerolog/log"
@@ -61,7 +63,10 @@ func Boot[A, S any](app App) *S {
 		Logo = app.Logo
 	}
 	fillBuildInfo()
-
+	fmt.Printf("%s\nVersion: %s\nSha: %s\nBuildDate: %s\nRuntime: %s\nOS: %s\nArch: %s\nNumCPU: %d\nGOMAXPROCS: %d\nGOMEMLIMIT=%s\n", string(Logo), BuildVersion, SHA, BuildDate, runtime.Version(), runtime.GOOS, runtime.GOARCH, runtime.NumCPU(), runtime.GOMAXPROCS(0), FormatBytes(debug.SetMemoryLimit(-1)))
+	if Mode != "" {
+		fmt.Printf("Mode: %s\n", Mode)
+	}
 	cfg := new(rootConfig[A, S])
 	if err := ReadConfig(string(app.ConfigFile), app.ConfigEnvVar, cfg); err != nil {
 		log.Fatal().Err(err).Msg("failed to read config")
