@@ -22,8 +22,9 @@ var modulelist []fx.Option
 // tutta in init() single-thread, quindi lo stato globale è sicuro.
 type moduleScope struct {
 	provides []any
-	supplies []fx.Option
+	supplies []any
 	invokes  []fx.Option
+	closed   bool
 }
 
 var current *moduleScope
@@ -56,28 +57,63 @@ func Provide(provide any, acceptedmodes ...string) {
 }
 
 // Supply registra un valore già istanziato. acceptedmodes opzionale come in Provide.
+//
+// Dentro un Module/ModuleClosed il valore è supplito con fx.Private, quindi è visibile solo ai
+// costruttori di quel modulo: la config di un servizio è un dettaglio del servizio, non una
+// dipendenza condivisa. A root resta pubblica — è così che la config applicativa supplita da
+// Boot rimane l'unica iniettabile da tutto il grafo. Il valore è accumulato nudo, perché è
+// buildModule a decidere la visibilità al momento di costruire l'fx.Module.
 func Supply(value any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
 		if current != nil {
-			current.supplies = append(current.supplies, fx.Supply(value))
+			current.supplies = append(current.supplies, value)
 		} else {
 			supply = append(supply, fx.Supply(value))
 		}
 	}
 }
 
-// Module raggruppa in un fx.Module(name) tutte le registrazioni (Provide/Supply/Invoke,
-// e i loro wrapper ProvideAs/ProvideNamed/...) effettuate dentro register. Serve solo per
-// il namespacing del grafo/log fx: i provide NON sono privati (nessun fx.Private), quindi
-// restano visibili all'intera app e i value group aggregano come prima (un consumer nel
-// modulo vede anche i produttori a root/antenati). Il mode-gating resta per-registrazione
-// (ogni Provide/Supply gate-a con IsMode prima di finire nello scope). Le chiamate fuori da
-// Module continuano a registrare nello scope root, quindi è retrocompatibile.
+// Module raggruppa in un fx.Module(name) tutte le registrazioni (Provide/Supply/Invoke, e i
+// loro wrapper ProvideAs/ProvideNamed/...) effettuate dentro register. È la primitiva dei
+// DRIVER — le librerie che esistono per dare un handle all'app (mongo, sql, redis) — e delle
+// registrazioni dell'app stessa:
 //
-//	core.Module("batch", func() { storemongo.Module(); scheduler.Module(cfg) })
+//   - i Supply sono PRIVATI al modulo (fx.Private): la config di un servizio non è iniettabile
+//     da fuori;
+//   - i Provide restano ESPORTATI: *Service, *bun.DB, client e interfacce sono consumabili
+//     dall'intera app, e i value group aggregano come prima (un consumer nel modulo vede anche
+//     i produttori a root/antenati).
+//
+// Il mode-gating resta per-registrazione (ogni Provide/Supply gate-a con IsMode prima di finire
+// nello scope). Le chiamate fuori da Module registrano nello scope root, quindi è retrocompatibile.
+//
+//	core.Module("mongo", func() { core.Supply(cfg); core.Provide(newService) })
 func Module(name string, register func()) {
+	buildModule(name, register, false)
+}
+
+// ModuleClosed è Module per i SOTTOSISTEMI CHIUSI — le librerie che consumano i seam dell'app
+// (api: rotte+business; kafka: Handler/Transformer; batch: ITaskRunner) e non le devono esporre
+// nulla in cambio: qui sono privati sia i Supply sia i Provide, quindi *Router, *Scheduler,
+// *Consumers, dispatcher, feed e i loro config non sono iniettabili dal grafo dell'app.
+//
+// Cosa continua ad attraversare il confine:
+//
+//   - dall'esterno verso l'interno: tutto ciò che è esportato a root (il business dell'app, il
+//     *coremongo.Service, gli Handler/runner forniti dall'app) è visibile ai costruttori del
+//     modulo, che ne è discendente — compresi i membri di value group forniti a root;
+//
+//   - dall'interno verso l'esterno: nulla. Un seam pubblico si esprime registrandolo FUORI dallo
+//     scope (è ciò che fa batch con store.IWorkItemStore/store.IData, wirati a root).
+//
+//     core.ModuleClosed("api", func() { core.Supply(cfg); core.Provide(newRouter) })
+func ModuleClosed(name string, register func()) {
+	buildModule(name, register, true)
+}
+
+func buildModule(name string, register func(), closed bool) {
 	prev := current
-	ms := &moduleScope{}
+	ms := &moduleScope{closed: closed}
 	current = ms
 	register()
 	current = prev
@@ -89,9 +125,17 @@ func Module(name string, register func()) {
 	}
 
 	opts := make([]fx.Option, 0, len(ms.supplies)+len(ms.invokes)+1)
-	opts = append(opts, ms.supplies...)
+	for _, v := range ms.supplies {
+		opts = append(opts, fx.Supply(v, fx.Private))
+	}
 	if len(ms.provides) > 0 {
-		opts = append(opts, fx.Provide(ms.provides...))
+		if ms.closed {
+			// fx.Private tra i target marca privati tutti i costruttori passati nella stessa
+			// chiamata (fx/provide.go: provideOption.apply).
+			opts = append(opts, fx.Provide(append(ms.provides, fx.Private)...))
+		} else {
+			opts = append(opts, fx.Provide(ms.provides...))
+		}
 	}
 	opts = append(opts, ms.invokes...)
 	modulelist = append(modulelist, fx.Module(name, opts...))
