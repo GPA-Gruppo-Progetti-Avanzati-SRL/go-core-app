@@ -88,7 +88,7 @@ func (p *Paging) Paging() (int, *core.ApplicationError) {
 	// If Page Size is 0, return all items.
 	// Otherwise, apply paging.
 	if errPS != nil {
-		return 0, core.BusinessErrorWithError(errPS)
+		return 0, core.BusinessError().WithCause(errPS)
 
 	} else if p.PageSize == 0 {
 		return -1, nil
@@ -101,7 +101,7 @@ func (p *Paging) Paging() (int, *core.ApplicationError) {
 	pageNumber = p.CurrentPage
 	errPN := p.SetCurrentPage(pageNumber)
 	if errPN != nil {
-		return 0, core.BusinessErrorWithError(errPN)
+		return 0, core.BusinessError().WithCause(errPN)
 	}
 
 	// Set offset and limit
@@ -167,7 +167,7 @@ func (p *Paging) setTotalPages(totalPages int) {
 func (p *Paging) SetPageSize(pageSize int) *core.ApplicationError {
 	err := p.validatorPageSize(pageSize)
 	if err != nil {
-		return core.BusinessErrorWithError(err)
+		return core.BusinessError().WithCause(err)
 	}
 
 	p.PageSize = pageSize
@@ -180,7 +180,7 @@ func (p *Paging) SetPageSize(pageSize int) *core.ApplicationError {
 func (p *Paging) SetCurrentPage(currentPage int) *core.ApplicationError {
 	err := validatorPageNumber(currentPage)
 	if err != nil {
-		return core.BusinessErrorWithError(err)
+		return core.BusinessError().WithCause(err)
 	}
 
 	p.CurrentPage = currentPage
@@ -226,7 +226,7 @@ func (p *Paging) setHasPrev(hasPrev bool) {
 // never unbounded. param == 0 ("all items") deliberately bypasses the cap.
 func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
 	if param < -1 {
-		return core.BusinessErrorWithCodeAndMessage("ERR-PAGESIZE", "invalid page size")
+		return core.BusinessError().WithCode("ERR-PAGESIZE").WithMessage("invalid page size")
 	}
 
 	max := p.maxPageSize
@@ -234,7 +234,7 @@ func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
 		max = FallbackMaxPageSize
 	}
 	if param > max {
-		return core.BusinessErrorWithCodeAndMessage("ERR-PAGESIZE", "invalid page size")
+		return core.BusinessError().WithCode("ERR-PAGESIZE").WithMessage("invalid page size")
 	}
 
 	return nil
@@ -244,7 +244,7 @@ func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
 func validatorPageNumber(param int) *core.ApplicationError {
 
 	if param < 1 {
-		return core.BusinessErrorWithCodeAndMessage("ERR-PAGENUMBER", "invalid page number")
+		return core.BusinessError().WithCode("ERR-PAGENUMBER").WithMessage("invalid page number")
 	}
 
 	return nil

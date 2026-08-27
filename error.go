@@ -26,9 +26,9 @@ func (e *ApplicationError) Log(op fmt.Stringer, fields ...Field) {
 	}
 	ev = ev.Str("op", op.String())
 	// La causa non è nel testo di Error() (che resta il solo Message): senza questo
-	// campo l'errore originale non comparirebbe da nessuna parte nei log. La causa
-	// sintetica dei costruttori code+message è invece omessa: ripeterebbe Message.
-	if _, sintetica := e.cause.(*codeError); e.cause != nil && !sintetica {
+	// campo l'errore originale non comparirebbe da nessuna parte nei log. Si stampa
+	// solo la causa reale — quella sintetica di Unwrap ripeterebbe Code e Message.
+	if e.cause != nil {
 		ev = ev.AnErr("cause", e.cause)
 	}
 	for _, f := range fields {
@@ -37,14 +37,14 @@ func (e *ApplicationError) Log(op fmt.Stringer, fields ...Field) {
 	ev.Send()
 }
 
-// codeError è la causa sintetica dei costruttori che ricevono code+message invece di
-// un errore: senza di essa quegli ApplicationError avrebbero Unwrap() nil e la catena
-// si fermerebbe, mentre quelli costruiti da un errore no. Con codeError la catena è
-// sempre completa e termina su una foglia che porta il codice applicativo.
+// codeError è la foglia sintetica che Unwrap sintetizza quando non è stata allegata
+// una causa reale: senza di essa un ApplicationError costruito senza errore avrebbe
+// Unwrap() nil e la catena si fermerebbe, mentre uno costruito da un errore no.
 //
-// È un tipo dedicato e non un errors.New(message) per due motivi: la foglia resta
-// distinguibile da una causa reale (WithCause la sostituisce, e Log non la stampa
-// perché non aggiunge nulla alla riga), e il testo porta anche il Code.
+// È un tipo dedicato e non un errors.New(message) per due motivi: resta distinguibile
+// da una causa reale (Log non la stampa, perché ripeterebbe la riga), e il testo porta
+// anche il Code. È sintetizzata al volo e non memorizzata, così riflette sempre Code e
+// Message correnti anche dopo WithCode/WithMessage.
 type codeError struct {
 	code    string
 	message string
@@ -80,90 +80,108 @@ func (m *ApplicationError) GetStatus() int {
 // accetta comunque errors.Is/errors.As su quella catena, quindi il ramo che ne dipende
 // non fallisce: semplicemente non viene mai preso.
 //
-//	appErr := core.TechnicalErrorWithError(err)
+//	appErr := core.TechnicalError().WithCause(err)
 //	errors.Is(appErr, mongo.ErrNoDocuments)   // ora attraversa fino a err
 //
-// Non ritorna mai nil per gli ApplicationError costruiti dai costruttori: quelli che
-// ricevono un errore lo conservano, quelli che ricevono code+message hanno una causa
-// sintetica (vedi codeError).
+// Non ritorna mai nil: se non è stata allegata una causa reale con WithCause/WithError,
+// sintetizza una foglia dal Code e dal Message correnti (vedi codeError), così la catena
+// è completa comunque sia stato costruito l'errore.
 func (m *ApplicationError) Unwrap() error {
-	return m.cause
+	if m.cause != nil {
+		return m.cause
+	}
+	return &codeError{code: m.Code, message: m.Message}
 }
 
-// WithCause allega la causa a un ApplicationError già costruito ed è pensata per i
-// costruttori *WithCodeAndMessage, che il codice specifico ce l'hanno ma l'errore
-// originale lo perderebbero:
+// I modificatori sotto sono ortogonali — uno per campo — e si compongono a partire da
+// un costruttore base (TechnicalError, BusinessError, NotFoundError):
 //
-//	return core.TechnicalErrorWithCodeAndMessage("MON-AGGINC", "aggiornamento incoerente").WithCause(err)
+//	core.TechnicalError().WithCode("MON-AGGINC").WithMessage("aggiornamento incoerente").WithCause(err)
+//	core.BusinessError().WithCause(err)
 //
-// Sostituisce la causa sintetica che quei costruttori mettono di default: una causa
-// reale vince sempre. Modifica il ricevente e lo ritorna (non ne fa una copia): va usata
-// sul valore appena costruito, come nell'esempio, non su un errore condiviso.
-func (m *ApplicationError) WithCause(err error) *ApplicationError {
-	m.cause = err
+// Modificano il ricevente e lo ritornano (non ne fanno una copia): vanno usati sul
+// valore appena costruito, come negli esempi, non su un errore condiviso.
+
+// WithCode sostituisce il codice applicativo.
+func (m *ApplicationError) WithCode(code string) *ApplicationError {
+	m.Code = code
 	return m
 }
 
-func TechnicalErrorWithError(err error) *ApplicationError {
+// WithMessage sostituisce il messaggio, che è ciò che Error() ritorna e ciò che finisce
+// nel body della risposta HTTP.
+func (m *ApplicationError) WithMessage(message string) *ApplicationError {
+	m.Message = message
+	return m
+}
 
+// WithAmbit sostituisce l'ambito, che i costruttori base riempiono con AppName.
+func (m *ApplicationError) WithAmbit(ambit string) *ApplicationError {
+	m.Ambit = ambit
+	return m
+}
+
+// WithCause allega l'errore che ha originato questo ApplicationError, rendendolo
+// raggiungibile da errors.Is/errors.As.
+//
+// Se il messaggio non è ancora stato impostato lo riempie con err.Error(): passare
+// l'errore rende quindi WithMessage superfluo nel caso comune, in cui il testo da
+// esporre È quello dell'errore.
+//
+//	core.TechnicalError().WithCause(err)                        // Message = err.Error()
+//	core.TechnicalError().WithCode("MON-AGGINC").
+//		WithMessage("aggiornamento incoerente").WithCause(err)   // Message resta il nostro
+//
+// Riempie solo un messaggio vuoto, non lo sovrascrive mai: l'ordine fra WithMessage e
+// WithCause è quindi indifferente, e un messaggio esplicito vince sempre.
+func (m *ApplicationError) WithCause(err error) *ApplicationError {
+	m.cause = err
+	if m.Message == "" && err != nil {
+		m.Message = err.Error()
+	}
+	return m
+}
+
+// TechnicalError costruisce un errore tecnico (HTTP 500) con codice di default TECH500.
+// Si compone con i modificatori With*:
+//
+//	core.TechnicalError().WithCause(err)
+//	core.TechnicalError().WithCode("SEQ-INV").WithMessage("sequence is not an integer")
+func TechnicalError() *ApplicationError {
 	return &ApplicationError{
 		StatusCode: 500,
-		Message:    err.Error(),
 		Ambit:      AppName,
 		Code:       "TECH500",
-		cause:      err,
 	}
 }
 
-func (m *ApplicationError) IsTechnicalError() bool {
-
-	return m.StatusCode == 500
-}
-
-func (m *ApplicationError) IsBusinessError() bool {
-
-	return m.StatusCode == 422
-}
-
-func TechnicalErrorWithCodeAndMessage(code, message string) *ApplicationError {
-
+// BusinessError costruisce un errore applicativo (HTTP 422) con codice di default BUS422.
+func BusinessError() *ApplicationError {
 	return &ApplicationError{
-		StatusCode: 500,
-		Message:    message,
+		StatusCode: 422,
 		Ambit:      AppName,
-		Code:       code,
-		cause:      &codeError{code: code, message: message},
+		Code:       "BUS422",
 	}
 }
 
+// NotFoundError costruisce un 404 con codice e messaggio di default. Chi ha in mano
+// l'errore del driver ce lo allega, così il chiamante può ancora distinguere un
+// "nessun documento" da un 404 sintetico:
+//
+//	core.NotFoundError().WithCause(mongo.ErrNoDocuments)
 func NotFoundError() *ApplicationError {
 	return &ApplicationError{
 		StatusCode: 404,
 		Ambit:      AppName,
 		Code:       "NOT-FOUND",
 		Message:    "Oggetto non trovato",
-		cause:      &codeError{code: "NOT-FOUND", message: "Oggetto non trovato"},
 	}
 }
 
-func BusinessErrorWithError(err error) *ApplicationError {
-
-	return &ApplicationError{
-		StatusCode: 422,
-		Message:    err.Error(),
-		Ambit:      AppName,
-		Code:       "BUS422",
-		cause:      err,
-	}
+func (m *ApplicationError) IsTechnicalError() bool {
+	return m.StatusCode == 500
 }
 
-func BusinessErrorWithCodeAndMessage(code, message string) *ApplicationError {
-
-	return &ApplicationError{
-		StatusCode: 422,
-		Message:    message,
-		Ambit:      AppName,
-		Code:       code,
-		cause:      &codeError{code: code, message: message},
-	}
+func (m *ApplicationError) IsBusinessError() bool {
+	return m.StatusCode == 422
 }

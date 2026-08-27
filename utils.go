@@ -59,12 +59,10 @@ func StringToDate(date string) (time.Time, *ApplicationError) {
 	timestamp, err := time.ParseInLocation(DateFormat, date, time.Local)
 
 	if err != nil {
-		return time.Time{}, &ApplicationError{
-			StatusCode: 422,
-			Ambit:      "Utils Methods - StringToDate",
-			Code:       "99999",
-			Message:    err.Error(),
-		}
+		return time.Time{}, BusinessError().
+			WithAmbit("Utils Methods - StringToDate").
+			WithCode("99999").
+			WithCause(err)
 	}
 
 	return timestamp, nil

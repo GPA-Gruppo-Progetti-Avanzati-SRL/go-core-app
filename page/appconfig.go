@@ -22,7 +22,7 @@ var defaultAppConfig = Config{DefaultPageSize: 10, DefaultPageNumber: 1, MaxPage
 // to FallbackMaxPageSize at validation time.
 func Configure(c Config) *core.ApplicationError {
 	if c.DefaultPageSize <= 0 || c.DefaultPageNumber <= 0 {
-		return core.TechnicalErrorWithCodeAndMessage("ERR-PAGECFG", "invalid paging config: default-pagesize and default-pagenumber must be > 0")
+		return core.TechnicalError().WithCode("ERR-PAGECFG").WithMessage("invalid paging config: default-pagesize and default-pagenumber must be > 0")
 	}
 	appConfig.Store(&c)
 	return nil

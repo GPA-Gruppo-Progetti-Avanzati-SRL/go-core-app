@@ -18,8 +18,8 @@ type customError struct{ Detail string }
 
 func (c *customError) Error() string { return "custom: " + c.Detail }
 
-func TestUnwrap_TechnicalErrorWithError(t *testing.T) {
-	appErr := TechnicalErrorWithError(errSentinel)
+func TestUnwrap_TechnicalError(t *testing.T) {
+	appErr := TechnicalError().WithCause(errSentinel)
 
 	if got := errors.Unwrap(appErr); got != errSentinel {
 		t.Fatalf("Unwrap = %v, atteso %v", got, errSentinel)
@@ -36,8 +36,8 @@ func TestUnwrap_TechnicalErrorWithError(t *testing.T) {
 	}
 }
 
-func TestUnwrap_BusinessErrorWithError(t *testing.T) {
-	appErr := BusinessErrorWithError(errSentinel)
+func TestUnwrap_BusinessError(t *testing.T) {
+	appErr := BusinessError().WithCause(errSentinel)
 
 	if !errors.Is(appErr, errSentinel) {
 		t.Error("errors.Is deve attraversare fino alla sentinella")
@@ -51,7 +51,7 @@ func TestUnwrap_AttraversaUnaCatenaAnnidata(t *testing.T) {
 	// Il caso reale: un driver wrappa la sua sentinella, il data layer la converte
 	// in ApplicationError, e il chiamante vuole ancora riconoscerla.
 	wrapped := fmt.Errorf("query fallita: %w", errSentinel)
-	appErr := TechnicalErrorWithError(wrapped)
+	appErr := TechnicalError().WithCause(wrapped)
 
 	if !errors.Is(appErr, errSentinel) {
 		t.Error("errors.Is deve attraversare ApplicationError + fmt.Errorf")
@@ -60,7 +60,7 @@ func TestUnwrap_AttraversaUnaCatenaAnnidata(t *testing.T) {
 
 func TestErrorsAs_RecuperaIlTipoConcretoDellaCausa(t *testing.T) {
 	cause := &customError{Detail: "vincolo violato"}
-	appErr := TechnicalErrorWithError(cause)
+	appErr := TechnicalError().WithCause(cause)
 
 	var target *customError
 	if !errors.As(appErr, &target) {
@@ -77,7 +77,7 @@ func TestErrorsAs_RecuperaIlTipoConcretoDellaCausa(t *testing.T) {
 	}
 }
 
-func TestWithCause_SuiCostruttoriCodeAndMessage(t *testing.T) {
+func TestWithCause_ConMessaggioEsplicito(t *testing.T) {
 	tests := []struct {
 		name   string
 		build  func(error) *ApplicationError
@@ -87,7 +87,7 @@ func TestWithCause_SuiCostruttoriCodeAndMessage(t *testing.T) {
 		{
 			name: "technical",
 			build: func(e error) *ApplicationError {
-				return TechnicalErrorWithCodeAndMessage("MON-AGGINC", "incoerente").WithCause(e)
+				return TechnicalError().WithCode("MON-AGGINC").WithMessage("incoerente").WithCause(e)
 			},
 			status: 500,
 			code:   "MON-AGGINC",
@@ -95,7 +95,7 @@ func TestWithCause_SuiCostruttoriCodeAndMessage(t *testing.T) {
 		{
 			name: "business",
 			build: func(e error) *ApplicationError {
-				return BusinessErrorWithCodeAndMessage("ERR-SORT", "sort invalido").WithCause(e)
+				return BusinessError().WithCode("ERR-SORT").WithMessage("sort invalido").WithCause(e)
 			},
 			status: 422,
 			code:   "ERR-SORT",
@@ -124,14 +124,14 @@ func TestWithCause_SuiCostruttoriCodeAndMessage(t *testing.T) {
 	}
 }
 
-func TestCausaSintetica_SuiCostruttoriCodeAndMessage(t *testing.T) {
+func TestCausaSintetica_SenzaCausaReale(t *testing.T) {
 	tests := []struct {
 		name  string
 		build func() *ApplicationError
 		leaf  string
 	}{
-		{"technical", func() *ApplicationError { return TechnicalErrorWithCodeAndMessage("TECH500", "boom") }, "TECH500: boom"},
-		{"business", func() *ApplicationError { return BusinessErrorWithCodeAndMessage("ERR-SORT", "sort invalido") }, "ERR-SORT: sort invalido"},
+		{"technical", func() *ApplicationError { return TechnicalError().WithCode("TECH500").WithMessage("boom") }, "TECH500: boom"},
+		{"business", func() *ApplicationError { return BusinessError().WithCode("ERR-SORT").WithMessage("sort invalido") }, "ERR-SORT: sort invalido"},
 		{"not found", NotFoundError, "NOT-FOUND: Oggetto non trovato"},
 	}
 	for _, tc := range tests {
@@ -162,8 +162,8 @@ func TestCausaSintetica_SuiCostruttoriCodeAndMessage(t *testing.T) {
 	}
 }
 
-func TestWithCause_SostituisceLaCausaSintetica(t *testing.T) {
-	appErr := TechnicalErrorWithCodeAndMessage("MON-AGGINC", "incoerente").WithCause(errSentinel)
+func TestWithCause_VinceSullaFogliaSintetica(t *testing.T) {
+	appErr := TechnicalError().WithCode("MON-AGGINC").WithMessage("incoerente").WithCause(errSentinel)
 
 	if got := errors.Unwrap(appErr); got != errSentinel {
 		t.Errorf("Unwrap = %v, attesa la causa reale %v", got, errSentinel)
@@ -186,11 +186,11 @@ func TestLog_StampaSoloLeCauseReali(t *testing.T) {
 	}
 
 	// Causa sintetica: ripeterebbe Message, non va nella riga.
-	if out := logged(TechnicalErrorWithCodeAndMessage("TECH500", "boom")); strings.Contains(out, `"cause"`) {
+	if out := logged(TechnicalError().WithCode("TECH500").WithMessage("boom")); strings.Contains(out, `"cause"`) {
 		t.Errorf("la causa sintetica non deve comparire nel log: %s", out)
 	}
 	// Causa reale: è l'unico punto in cui l'errore originale è osservabile.
-	out := logged(TechnicalErrorWithCodeAndMessage("MON-AGGINC", "incoerente").WithCause(errSentinel))
+	out := logged(TechnicalError().WithCode("MON-AGGINC").WithMessage("incoerente").WithCause(errSentinel))
 	if !strings.Contains(out, `"cause":"sentinel"`) {
 		t.Errorf("la causa reale deve comparire nel log: %s", out)
 	}
@@ -203,8 +203,8 @@ func (o opName) String() string { return string(o) }
 func TestSerializzazioneInvariata(t *testing.T) {
 	// La causa non deve comparire nel payload: il body di risposta e il documento
 	// persistito devono restare identici a prima dell'introduzione del campo.
-	senza := TechnicalErrorWithCodeAndMessage("TECH500", "boom")
-	con := TechnicalErrorWithCodeAndMessage("TECH500", "boom").WithCause(errSentinel)
+	senza := TechnicalError().WithCode("TECH500").WithMessage("boom")
+	con := TechnicalError().WithCode("TECH500").WithMessage("boom").WithCause(errSentinel)
 
 	jSenza, err := json.Marshal(senza)
 	if err != nil {
@@ -225,8 +225,8 @@ func TestSerializzazioneInvariata(t *testing.T) {
 func TestApplicationErrorAnnidato_ilPiuEsternoVince(t *testing.T) {
 	// errors.As si ferma al primo *ApplicationError della catena: è ciò su cui
 	// contano coreapi.configureError e ManageBusinessError.
-	inner := BusinessErrorWithCodeAndMessage("ERR-PAGESIZE", "pagesize invalido")
-	outer := BusinessErrorWithError(inner)
+	inner := BusinessError().WithCode("ERR-PAGESIZE").WithMessage("pagesize invalido")
+	outer := BusinessError().WithCause(inner)
 
 	var found *ApplicationError
 	if !errors.As(error(outer), &found) {
@@ -238,5 +238,54 @@ func TestApplicationErrorAnnidato_ilPiuEsternoVince(t *testing.T) {
 	// Ma quello interno ora è comunque raggiungibile, cosa che prima non era vera.
 	if !errors.Is(outer, error(inner)) {
 		t.Error("l'ApplicationError interno deve restare raggiungibile nella catena")
+	}
+}
+
+func TestWithCause_RiempieIlMessaggioSoloSeVuoto(t *testing.T) {
+	// Passare l'errore rende WithMessage superfluo nel caso comune.
+	if got := TechnicalError().WithCause(errSentinel).Message; got != "sentinel" {
+		t.Errorf("Message = %q, atteso quello della causa", got)
+	}
+	// Un messaggio esplicito vince, in entrambi gli ordini: WithCause riempie un
+	// messaggio vuoto, non lo sovrascrive mai.
+	prima := TechnicalError().WithMessage("mio").WithCause(errSentinel).Message
+	dopo := TechnicalError().WithCause(errSentinel).WithMessage("mio").Message
+	if prima != "mio" || dopo != "mio" {
+		t.Errorf("l'ordine non deve contare: WithMessage-poi-WithCause=%q, WithCause-poi-WithMessage=%q", prima, dopo)
+	}
+	// NotFoundError ha già un messaggio: la causa non lo tocca.
+	nf := NotFoundError().WithCause(errSentinel)
+	if nf.Message != "Oggetto non trovato" {
+		t.Errorf("NotFoundError.Message = %q, atteso quello di default", nf.Message)
+	}
+	if !errors.Is(nf, errSentinel) {
+		t.Error("la causa deve comunque essere allegata")
+	}
+}
+
+func TestModificatoriOrtogonali(t *testing.T) {
+	appErr := BusinessError().
+		WithCode("ERR-X").
+		WithMessage("messaggio").
+		WithAmbit("Utils").
+		WithCause(errSentinel)
+
+	if appErr.StatusCode != 422 {
+		t.Errorf("StatusCode = %d, atteso 422 dal costruttore base", appErr.StatusCode)
+	}
+	if appErr.Code != "ERR-X" || appErr.Message != "messaggio" || appErr.Ambit != "Utils" {
+		t.Errorf("campi = %+v", *appErr)
+	}
+	if !errors.Is(appErr, errSentinel) {
+		t.Error("la causa deve essere raggiungibile")
+	}
+}
+
+func TestCausaSintetica_RifletteCodeEMessageCorrenti(t *testing.T) {
+	// La foglia è sintetizzata da Unwrap, non memorizzata: segue i modificatori
+	// applicati dopo la costruzione.
+	appErr := TechnicalError().WithMessage("boom").WithCode("SEQ-INV")
+	if got := errors.Unwrap(appErr).Error(); got != "SEQ-INV: boom" {
+		t.Errorf("foglia = %q, attesa \"SEQ-INV: boom\"", got)
 	}
 }
