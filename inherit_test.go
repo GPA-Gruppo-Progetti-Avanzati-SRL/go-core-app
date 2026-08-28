@@ -10,17 +10,19 @@ type innerBlock struct {
 }
 
 type tuningBlock struct {
-	Name       string
-	Size       int
-	Timeout    time.Duration
-	Ratio      float64
-	Enabled    bool
-	Toggle     *bool
-	Attempts   *int
-	Props      map[string]string
-	Topics     []string
-	Inner      innerBlock
-	unexported string
+	Name     string
+	Size     int
+	Timeout  time.Duration
+	Ratio    float64
+	Enabled  bool
+	Toggle   *bool
+	Attempts *int
+	Props    map[string]string
+	Topics   []string
+	Inner    innerBlock
+	// Mai letto di proposito: esiste perché Inherit cammina i campi per reflection e su un campo
+	// non esportato reflect.Value.Set panicherebbe. Rimuoverlo toglie la guardia, non del codice morto.
+	unexported string //nolint:unused // fixture: verifica che Inherit salti i campi non esportati
 }
 
 func TestInherit_ZeroEreditaValorizzatoNo(t *testing.T) {
