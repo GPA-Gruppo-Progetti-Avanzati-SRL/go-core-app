@@ -142,6 +142,12 @@ func (m *ApplicationError) WithCause(err error) *ApplicationError {
 	return m
 }
 
+// Ambit è la libreria di origine, da mettere con WithAmbit sugli errori nati DENTRO una
+// libreria go-core: i costruttori base riempiono Ambit con AppName — cioè con l'app che
+// riceve l'errore — quindi senza sovrascriverlo un guasto della libreria si presenta come
+// un errore dell'applicazione, e chi legge il log non sa dove guardare.
+const Ambit = "go-core-app"
+
 // TechnicalError costruisce un errore tecnico (HTTP 500) con codice di default TECH500.
 // Si compone con i modificatori With*:
 //

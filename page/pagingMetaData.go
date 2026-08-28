@@ -2,6 +2,7 @@ package page
 
 import (
 	"errors"
+	"fmt"
 	"math"
 
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app"
@@ -88,7 +89,9 @@ func (p *Paging) Paging() (int, *core.ApplicationError) {
 	// If Page Size is 0, return all items.
 	// Otherwise, apply paging.
 	if errPS != nil {
-		return 0, core.BusinessError().WithCause(errPS)
+		// Rimbalzato così com'è: avvolgerlo in un BusinessError() nudo sostituiva
+		// ERR-PAGESIZE con BUS422, cioè buttava via il codice appena calcolato.
+		return 0, errPS
 
 	} else if p.PageSize == 0 {
 		return -1, nil
@@ -101,7 +104,7 @@ func (p *Paging) Paging() (int, *core.ApplicationError) {
 	pageNumber = p.CurrentPage
 	errPN := p.SetCurrentPage(pageNumber)
 	if errPN != nil {
-		return 0, core.BusinessError().WithCause(errPN)
+		return 0, errPN
 	}
 
 	// Set offset and limit
@@ -167,7 +170,7 @@ func (p *Paging) setTotalPages(totalPages int) {
 func (p *Paging) SetPageSize(pageSize int) *core.ApplicationError {
 	err := p.validatorPageSize(pageSize)
 	if err != nil {
-		return core.BusinessError().WithCause(err)
+		return err
 	}
 
 	p.PageSize = pageSize
@@ -180,7 +183,7 @@ func (p *Paging) SetPageSize(pageSize int) *core.ApplicationError {
 func (p *Paging) SetCurrentPage(currentPage int) *core.ApplicationError {
 	err := validatorPageNumber(currentPage)
 	if err != nil {
-		return core.BusinessError().WithCause(err)
+		return err
 	}
 
 	p.CurrentPage = currentPage
@@ -226,7 +229,8 @@ func (p *Paging) setHasPrev(hasPrev bool) {
 // never unbounded. param == 0 ("all items") deliberately bypasses the cap.
 func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
 	if param < -1 {
-		return core.BusinessError().WithCode("ERR-PAGESIZE").WithMessage("invalid page size")
+		return core.BusinessError().WithAmbit(core.Ambit).WithCode(ErrPageSize).
+			WithMessage(fmt.Sprintf("invalid page size %d: must be >= -1", param))
 	}
 
 	max := p.maxPageSize
@@ -234,7 +238,8 @@ func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
 		max = FallbackMaxPageSize
 	}
 	if param > max {
-		return core.BusinessError().WithCode("ERR-PAGESIZE").WithMessage("invalid page size")
+		return core.BusinessError().WithAmbit(core.Ambit).WithCode(ErrPageSizeMax).
+			WithMessage(fmt.Sprintf("page size %d exceeds the maximum of %d", param, max))
 	}
 
 	return nil
@@ -244,7 +249,8 @@ func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
 func validatorPageNumber(param int) *core.ApplicationError {
 
 	if param < 1 {
-		return core.BusinessError().WithCode("ERR-PAGENUMBER").WithMessage("invalid page number")
+		return core.BusinessError().WithAmbit(core.Ambit).WithCode(ErrPageNumber).
+			WithMessage(fmt.Sprintf("invalid page number %d: must be >= 1", param))
 	}
 
 	return nil

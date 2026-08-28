@@ -35,7 +35,7 @@ func ValidateStruct(i any) *ApplicationError {
 		// La causa è l'errore del validator: con WithCause il chiamante può recuperarlo
 		// con errors.As e ispezionare i singoli campi falliti, invece di dover fare il
 		// parsing del messaggio già formattato.
-		return TechnicalError().WithCode(ErrValidation).WithMessage(errmsg).WithCause(verr)
+		return TechnicalError().WithAmbit(Ambit).WithCode(ErrValidation).WithMessage(errmsg).WithCause(verr)
 
 	}
 	return nil

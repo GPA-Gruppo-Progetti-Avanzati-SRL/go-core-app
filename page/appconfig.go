@@ -6,6 +6,15 @@ import (
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app"
 )
 
+// Codici degli errori di paginazione. Il chiamante li riceve in ApplicationError.Code, con
+// Ambit = core.Ambit: sono errori della libreria, non dell'applicazione.
+const (
+	ErrPageConfig  = "ERR-PAGECFG"      // config di paginazione non valida (boot)
+	ErrPageSize    = "ERR-PAGESIZE"     // page size fuori dal dominio ammesso
+	ErrPageSizeMax = "ERR-PAGESIZE-MAX" // page size oltre il massimo consentito
+	ErrPageNumber  = "ERR-PAGENUMBER"   // page number < 1
+)
+
 // appConfig holds the application-wide paging policy singleton. Unlike the
 // removed package globals (rewritten on every InitPaging call), it is written
 // once at boot via Configure and read lock-free afterwards (atomic pointer
@@ -22,7 +31,7 @@ var defaultAppConfig = Config{DefaultPageSize: 10, DefaultPageNumber: 1, MaxPage
 // to FallbackMaxPageSize at validation time.
 func Configure(c Config) *core.ApplicationError {
 	if c.DefaultPageSize <= 0 || c.DefaultPageNumber <= 0 {
-		return core.TechnicalError().WithCode("ERR-PAGECFG").WithMessage("invalid paging config: default-pagesize and default-pagenumber must be > 0")
+		return core.TechnicalError().WithAmbit(core.Ambit).WithCode(ErrPageConfig).WithMessage("invalid paging config: default-pagesize and default-pagenumber must be > 0")
 	}
 	appConfig.Store(&c)
 	return nil

@@ -55,13 +55,18 @@ func ConvertStringToTimeDate(input string) (time.Time, error) {
 	return date, nil
 }
 
+// ErrDateParse: stringa non conforme a DateFormat. Sostituisce il codice segnaposto "99999",
+// che non diceva nulla a chi lo riceveva.
+const ErrDateParse = "ERR-DATE"
+
 func StringToDate(date string) (time.Time, *ApplicationError) {
 	timestamp, err := time.ParseInLocation(DateFormat, date, time.Local)
 
 	if err != nil {
 		return time.Time{}, BusinessError().
-			WithAmbit("Utils Methods - StringToDate").
-			WithCode("99999").
+			WithAmbit(Ambit).
+			WithCode(ErrDateParse).
+			WithMessage("StringToDate: data " + strconv.Quote(date) + " non conforme a " + DateFormat).
 			WithCause(err)
 	}
 
