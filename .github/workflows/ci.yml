@@ -5,7 +5,7 @@ name: ci
 # GPA-Gruppo-Progetti-Avanzati-SRL/go-core-ci → .github/workflows/module-ci.yml
 on:
   push:
-    branches: [main]
+    branches: [master]
   pull_request:
   # Notturna: govulncheck deve girare anche senza commit, perché una CVE nuova compare da sé.
   # Minuti sfalsati fra le librerie per non far partire sette run nello stesso istante.
@@ -18,4 +18,4 @@ permissions:
 
 jobs:
   ci:
-    uses: GPA-Gruppo-Progetti-Avanzati-SRL/go-core-ci/.github/workflows/module-ci.yml@main
+    uses: GPA-Gruppo-Progetti-Avanzati-SRL/go-core-ci/.github/workflows/module-ci.yml@master
