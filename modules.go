@@ -22,6 +22,9 @@ var modulelist []fx.Option
 // tutta in init() single-thread, quindi lo stato globale è sicuro.
 type moduleScope struct {
 	provides []any
+	// privates sono i Provide che il modulo tiene per sé anche quando i suoi Provide sono
+	// esportati (vedi Private). In un ModuleClosed non serve — lì è privato tutto.
+	privates []any
 	supplies []any
 	invokes  []fx.Option
 	closed   bool
@@ -49,11 +52,45 @@ func IsMode(acceptedmodes ...string) bool {
 func Provide(provide any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
 		if current != nil {
-			current.provides = append(current.provides, provide)
+			if inPrivate {
+				current.privates = append(current.privates, provide)
+			} else {
+				current.provides = append(current.provides, provide)
+			}
 		} else {
 			provideslist = append(provideslist, provide)
 		}
 	}
+}
+
+// inPrivate dice se la registrazione in corso avviene dentro una closure Private. È stato
+// globale come current, e per la stessa ragione: il wiring è single-thread.
+var inPrivate bool
+
+// Private rende PRIVATI al modulo corrente i Provide registrati dentro register, anche quando il
+// modulo esporta i propri (Module). Serve quando il gruppo di registrazioni che compone un servizio
+// contiene sia il servizio — che l'app deve poter iniettare — sia i suoi ingranaggi, che non le
+// servono e che due moduli fratelli potrebbero fornire entrambi:
+//
+//	core.Module("kafka-producer", func() {
+//	    core.Supply(cfg.Server)              // privato: Supply in un Module lo è già
+//	    core.Private(driver)                 // il driver.Factory resta dentro
+//	    core.Provide(newProducer)            // il servizio esce
+//	})
+//
+// Senza, l'unica granularità sarebbe il modulo intero: o tutto esportato (Module) o niente
+// (ModuleClosed), e un ingranaggio esportato da due moduli fratelli è un duplicate provide.
+//
+// Panica fuori da un Module/ModuleClosed: a root non esiste uno scope da cui nascondersi, e non
+// fare nulla in silenzio sarebbe la risposta peggiore.
+func Private(register func()) {
+	if current == nil {
+		panic("core.Private: chiamabile solo dentro core.Module o core.ModuleClosed (a root non c'è uno scope in cui essere privati)")
+	}
+	prev := inPrivate
+	inPrivate = true
+	register()
+	inPrivate = prev
 }
 
 // Supply registra un valore già istanziato. acceptedmodes opzionale come in Provide.
@@ -113,18 +150,23 @@ func ModuleClosed(name string, register func()) {
 
 func buildModule(name string, register func(), closed bool) {
 	prev := current
+	// Un Module annidato dentro una closure Private apre un proprio scope: la privatezza vale per
+	// il modulo che l'ha dichiarata, non si eredita in quello nuovo (che ha il suo confine).
+	prevPrivate := inPrivate
+	inPrivate = false
 	ms := &moduleScope{closed: closed}
 	current = ms
 	register()
 	current = prev
+	inPrivate = prevPrivate
 
 	// Nessuna registrazione (es. tutti i componenti gate-ati via dal mode corrente):
 	// niente fx.Module vuoto, per non sporcare grafo/log fx.
-	if len(ms.provides) == 0 && len(ms.supplies) == 0 && len(ms.invokes) == 0 {
+	if len(ms.provides) == 0 && len(ms.privates) == 0 && len(ms.supplies) == 0 && len(ms.invokes) == 0 {
 		return
 	}
 
-	opts := make([]fx.Option, 0, len(ms.supplies)+len(ms.invokes)+1)
+	opts := make([]fx.Option, 0, len(ms.supplies)+len(ms.invokes)+2)
 	for _, v := range ms.supplies {
 		opts = append(opts, fx.Supply(v, fx.Private))
 	}
@@ -136,6 +178,11 @@ func buildModule(name string, register func(), closed bool) {
 		} else {
 			opts = append(opts, fx.Provide(ms.provides...))
 		}
+	}
+	// I Provide dentro Private vanno in una chiamata SEPARATA, perché fx.Private marca l'intera
+	// chiamata: mescolarli con gli altri renderebbe privato anche ciò che il modulo esporta.
+	if len(ms.privates) > 0 {
+		opts = append(opts, fx.Provide(append(ms.privates, fx.Private)...))
 	}
 	opts = append(opts, ms.invokes...)
 	modulelist = append(modulelist, fx.Module(name, opts...))
@@ -320,4 +367,5 @@ func resetRegistry() {
 	populatelist = nil
 	modulelist = nil
 	current = nil
+	inPrivate = false
 }

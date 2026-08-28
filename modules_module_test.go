@@ -265,3 +265,88 @@ func TestConfigureApp_SvuotaIlRegistro(t *testing.T) {
 		t.Fatalf("la seconda app non deve vedere le registrazioni della prima: %v", err)
 	}
 }
+
+// --- core.Private: granularità dentro un Module aperto ---
+
+// svcGear è l'ingranaggio di un servizio: nel caso reale è la driver.Factory di go-core-kafka, che
+// serve al costruttore del producer e a nessun altro.
+type svcGear struct{ N int }
+
+type svcOther struct{ Gear *svcGear }
+
+// TestPrivateProvideStaysInModule: in un Module aperto, ciò che è registrato dentro Private resta
+// dentro — ma il resto continua a uscire. È la granularità che prima non esisteva: o tutto esportato
+// (Module) o niente (ModuleClosed).
+func TestPrivateProvideStaysInModule(t *testing.T) {
+	t.Run("l'ingranaggio non è iniettabile a root", func(t *testing.T) {
+		resetLists()
+		Module("kafka-producer", func() {
+			Private(func() { Provide(func() *svcGear { return &svcGear{N: 1} }) })
+			Provide(func(g *svcGear) *svcConfig { return &svcConfig{Url: "producer"} })
+		})
+		Invoke(func(*svcGear) {})
+
+		if err := fx.New(provides(), invokes(), fx.Options(modulelist...)).Err(); err == nil {
+			t.Fatal("fx.New senza errore: il provide dentro Private è ancora iniettabile a root")
+		}
+	})
+
+	t.Run("il servizio esce e vede il suo ingranaggio", func(t *testing.T) {
+		resetLists()
+		var got string
+		Module("kafka-producer", func() {
+			Private(func() { Provide(func() *svcGear { return &svcGear{N: 1} }) })
+			Provide(func(g *svcGear) *svcConfig { return &svcConfig{Url: "producer"} })
+		})
+		Invoke(func(s *svcConfig) { got = s.Url })
+
+		app := fx.New(provides(), invokes(), fx.Options(modulelist...))
+		if err := app.Err(); err != nil {
+			t.Fatalf("fx.New error: %v", err)
+		}
+		startStop(t, app)
+		if got != "producer" {
+			t.Fatalf("provide esportato del modulo = %q, want producer", got)
+		}
+	})
+}
+
+// TestPrivateNoCollisionTraFratelli è la ragione per cui Private esiste: due moduli che hanno lo
+// stesso ingranaggio possono convivere nello stesso processo. Esportandolo, il secondo darebbe
+// "already provided" — ed è il caso di due ProducerModule, o di un ProducerModule accanto a un
+// Module con consumer.
+func TestPrivateNoCollisionTraFratelli(t *testing.T) {
+	resetLists()
+	var seenA, seenB int
+	Module("producer-a", func() {
+		Private(func() { Provide(func() *svcGear { return &svcGear{N: 1} }) })
+		Provide(func(g *svcGear) *svcConfig { return &svcConfig{Url: "a"} })
+		Invoke(func(g *svcGear) { seenA = g.N })
+	})
+	Module("producer-b", func() {
+		Private(func() { Provide(func() *svcGear { return &svcGear{N: 2} }) })
+		Provide(func(g *svcGear) *svcOther { return &svcOther{Gear: g} })
+		Invoke(func(g *svcGear) { seenB = g.N })
+	})
+
+	app := fx.New(provides(), fx.Options(modulelist...))
+	if err := app.Err(); err != nil {
+		t.Fatalf("fx.New error: %v", err)
+	}
+	startStop(t, app)
+	if seenA != 1 || seenB != 2 {
+		t.Fatalf("ogni modulo deve vedere il PROPRIO ingranaggio: a=%d (want 1), b=%d (want 2)", seenA, seenB)
+	}
+}
+
+// TestPrivateFuoriDaModulePanica: a root non esiste uno scope da cui nascondersi, quindi Private non
+// avrebbe nulla da fare — e non farlo in silenzio sarebbe la risposta peggiore.
+func TestPrivateFuoriDaModulePanica(t *testing.T) {
+	resetLists()
+	defer func() {
+		if recover() == nil {
+			t.Fatal("Private a root non ha panicato")
+		}
+	}()
+	Private(func() { Provide(func() *svcGear { return &svcGear{} }) })
+}
