@@ -16,14 +16,9 @@ func (c *namedClient) ID() string { return c.id }
 func newNamedClient(id string) *namedClient { return &namedClient{id: id} }
 
 // resetLists azzera lo stato package-level tra i sotto-test.
-func resetLists() {
-	provideslist = nil
-	invokelist = nil
-	supply = nil
-	populatelist = nil
-	modulelist = nil
-	current = nil
-}
+// resetLists delega a resetRegistry: l'elenco delle liste sta in un posto solo (modules.go),
+// altrimenti aggiungere una lista e dimenticarla qui darebbe test che si contaminano fra loro.
+func resetLists() { resetRegistry() }
 
 func TestProvideNamed(t *testing.T) {
 	t.Run("named result resolved by name", func(t *testing.T) {

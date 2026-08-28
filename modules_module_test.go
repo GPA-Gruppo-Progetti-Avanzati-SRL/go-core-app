@@ -233,3 +233,35 @@ func startStop(t *testing.T, app *fx.App) {
 		t.Fatalf("stop error: %v", err)
 	}
 }
+
+// TestConfigureApp_SvuotaIlRegistro copre il §3.2 dell'analisi: le liste di registrazione sono
+// variabili di package, quindi senza svuotarle una seconda fx.App nello stesso processo eredita
+// le registrazioni della prima. Run e Start sono duali e un'app ne chiama una sola: il caso reale
+// non è "Run dopo Start" ma **più app nello stesso processo**, cioè i test — dove `-count=2`
+// riesegue lo stesso test e il suo Supply è ancora nella lista.
+func TestConfigureApp_SvuotaIlRegistro(t *testing.T) {
+	resetLists()
+	t.Cleanup(resetLists)
+
+	type svc struct{ n int }
+
+	Supply(&svc{n: 1})
+	Provide(func() string { return "x" })
+	Module("un-modulo", func() { Supply(42) })
+
+	if app := configureApp(); app.Err() != nil {
+		t.Fatalf("la prima app deve costruirsi: %v", app.Err())
+	}
+
+	if provideslist != nil || invokelist != nil || supply != nil ||
+		populatelist != nil || modulelist != nil || current != nil {
+		t.Fatal("registro non svuotato da configureApp: la prossima app erediterebbe queste registrazioni")
+	}
+
+	// Senza lo svuotamento qui dig direbbe "cannot provide *svc: already provided".
+	Supply(&svc{n: 2})
+	app := configureApp()
+	if err := app.Err(); err != nil {
+		t.Fatalf("la seconda app non deve vedere le registrazioni della prima: %v", err)
+	}
+}

@@ -290,11 +290,34 @@ func Start(ctx context.Context, opts ...RunOption) (*fx.App, error) {
 
 func configureApp() *fx.App {
 
-	return fx.New(
+	app := fx.New(
 		fx.WithLogger(fxlogger.WithZerolog(log.Logger)),
 		provides(),
 		populates(),
 		invokes(),
 		fx.Options(modulelist...),
 	)
+
+	// Le liste sono un accumulatore PER LA PROSSIMA app, non lo stato di quella appena costruita:
+	// fx.New ha già copiato ciò che le serve.
+	//
+	// Un'applicazione chiama Run *oppure* Start — sono duali — quindi il punto NON è l'idempotenza
+	// di una seconda chiamata dentro la stessa app. Il punto è che senza lo svuotamento **non si può
+	// costruire più di una fx.App nello stesso processo**, e i test sono esattamente quel caso: con
+	// `go test -count=2` lo stesso test gira due volte, il suo Supply resta nella lista e dig
+	// fallisce con "already provided" (è il rosso storico di go-core-batch/simplejob).
+	resetRegistry()
+	return app
+}
+
+// resetRegistry svuota l'accumulatore delle registrazioni. È l'unico punto che elenca le liste:
+// una seconda copia dell'elenco sarebbe una copia da tenere allineata, e dimenticarne una lì
+// significa uno stato che sopravvive senza che nulla lo segnali.
+func resetRegistry() {
+	provideslist = nil
+	invokelist = nil
+	supply = nil
+	populatelist = nil
+	modulelist = nil
+	current = nil
 }
