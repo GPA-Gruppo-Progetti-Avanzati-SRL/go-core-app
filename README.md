@@ -202,6 +202,26 @@ e un `Supply` a root convive con l'omonimo privato di un modulo (che vince per i
 `batch.Module`, `coreapi.Module` e `corekafka.Module` usano già `ModuleClosed` internamente — non
 ri-avvolgerli a mano.
 
+#### `core.Private` — granularità dentro un `Module`
+
+```go
+core.Module("kafka-producer", func() {
+    core.Supply(cfg.Server)           // privato: in un Module i Supply lo sono già
+    core.Private(driver)              // la driver.Factory resta dentro
+    core.Provide(newProducer)         // il servizio esce
+})
+```
+
+`core.Private(register)` rende privati i soli `Provide` registrati nella closure, mentre il modulo
+continua a esportare gli altri. Serve quando il gruppo di registrazioni che compone un servizio
+contiene sia il servizio — che l'app inietta — sia i suoi **ingranaggi**, che non le servono e che due
+moduli fratelli potrebbero fornire entrambi: senza, l'unica granularità sarebbe il modulo intero (o
+tutto esportato con `Module`, o niente con `ModuleClosed`), e un ingranaggio esportato da due
+sottoalberi è un `duplicate provide`. In-tree lo usa `corekafka.ProducerModule` per la `driver.Factory`.
+
+Panica fuori da un `Module`/`ModuleClosed`: a root non esiste uno scope da cui nascondersi, e non fare
+nulla in silenzio sarebbe la risposta peggiore.
+
 ### `core.ProvideStruct` — costruttore sintetizzato
 
 ```go
