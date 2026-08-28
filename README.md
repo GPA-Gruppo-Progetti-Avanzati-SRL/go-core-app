@@ -105,6 +105,13 @@ Le struct usano i tag `yaml:` + `mapstructure:` (+ `validate:` per la validazion
 Tutte le funzioni pubbliche ritornano `(*T, *core.ApplicationError)`. L'`ApplicationError` porta
 `StatusCode`, `Ambit`, `Code`, `Message` e una **causa non esportata**.
 
+Il catalogo dei codici emessi da questa libreria è in **[ERRORI.md](ERRORI.md)**. `core.Ambit`
+(`"go-core-app"`) è l'ambito da mettere con `WithAmbit` sugli errori nati **dentro** una libreria
+go-core: i costruttori base riempiono `Ambit` con l'`AppName`, cioè con l'app che *riceve* l'errore,
+quindi senza sovrascriverlo un guasto della libreria si presenta come un errore dell'applicazione e
+chi legge il log non sa dove guardare. Ogni lib go-core ha la propria costante `Ambit` e il proprio
+`ERRORI.md`.
+
 L'API è **un costruttore base per status + modificatori ortogonali**, uno per campo, componibili in
 qualsiasi ordine:
 
