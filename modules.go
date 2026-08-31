@@ -310,10 +310,18 @@ func WithTracing(acceptedmodes ...string) RunOption {
 	return func() { Invoke(NewTracer, acceptedmodes...) }
 }
 
-// WithServerMetrics espone /metrics e /health su :2112. Da NON abilitare in mode API: go-core-api
-// serve già entrambi sulla porta dell'API, e i due server esporrebbero le stesse metriche.
+// WithServerMetrics espone /metrics e /health su 0.0.0.0:2112. Da NON abilitare in mode API:
+// go-core-api serve già entrambi sulla porta dell'API, e i due server esporrebbero le stesse
+// metriche.
 //
 //	core.Run(core.WithServerMetrics(engine.Scheduler, engine.Worker))
+//
+// Indirizzo, ReadHeaderTimeout e l'esposizione di /debug/pprof/* si configurano dalla sezione
+// `metrics:` dello YAML (vedi MetricsConfig), non da qui: sono valori che variano per ambiente e
+// quasi nessuna app li tocca, quindi non diventano un argomento che ogni chiamante deve scrivere.
+//
+//	metrics:
+//	  pprof: true    # default false; in mode API il gate è invece `develop-mode` di go-core-api
 func WithServerMetrics(acceptedmodes ...string) RunOption {
 	return func() { Invoke(NewServerMetrics, acceptedmodes...) }
 }

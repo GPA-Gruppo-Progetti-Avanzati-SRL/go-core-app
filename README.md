@@ -61,7 +61,7 @@ l'app non parte, invece di girare con default silenziosi.
 | RunOption | Effetto |
 |---|---|
 | `core.WithTracing(modes...)` | esportazione OTLP delle trace |
-| `core.WithServerMetrics(modes...)` | server Prometheus su `:2112` (`/metrics`, `/health`, `/debug/pprof/*`) |
+| `core.WithServerMetrics(modes...)` | server ops su `0.0.0.0:2112` (`/metrics`, `/health`; `/debug/pprof/*` solo con `metrics.pprof: true`) |
 
 > `WithServerMetrics` **non** va usata in mode API: `go-core-api` serve già `/metrics` sulla porta dell'API.
 
@@ -429,9 +429,25 @@ core.Execute[mioTask]()   // costruisce il comando cobra, flag auto-derivate, es
 
 ## Metriche, tracing, health
 
-- `core.NewServerMetrics` (via `core.WithServerMetrics`) espone su `:2112` `/metrics` (Prometheus),
-  `/health` e `/debug/pprof/*` — `net/http/pprof` è importato dalla libreria, quindi il profilo
-  `goroutineleak` (GA da Go 1.27) è già raggiungibile su `:2112/debug/pprof/goroutineleak`.
+- `core.NewServerMetrics` (via `core.WithServerMetrics`) espone `/metrics` (Prometheus) e `/health`
+  su `0.0.0.0:2112`. Indirizzo, `read-header-timeout` e pprof si configurano dalla sezione YAML
+  **`metrics:`**, che è **facoltativa** — ometterla dà esattamente `0.0.0.0:2112` con pprof spento:
+
+  ```yaml
+  metrics:
+    host: 0.0.0.0            # default: tutte le interfacce (Prometheus scrapa l'IP del pod)
+    port: 2112               # default
+    pprof: false             # default: /debug/pprof/* NON registrato
+    read-header-timeout: 5s  # default
+  ```
+
+  Con `pprof: true` il server monta `core.ProfilingHandler()`, quindi `/debug/pprof/goroutineleak`
+  (profilo GA da Go 1.27) diventa raggiungibile su `:2112` e mostra le label del framework
+  (`batch_job`, `batch_worker`, `kafka_consumer`). Non è un blank import: `_ "net/http/pprof"`
+  registrerebbe su `http.DefaultServeMux`, che questo server non è — gli handler sarebbero
+  irraggiungibili e insieme pronti a diventare pubblici se una dipendenza servisse quel mux.
+  **In mode API il gate è un altro**: lì la porta è quella pubblica dell'API e pprof si accende
+  solo con `develop-mode: true` di `go-core-api`.
 - `core.NewTracer` (via `core.WithTracing`) configura l'export OTLP.
 - `GOMEMLIMIT` è impostato automaticamente dai limiti del cgroup quando l'app gira in container.
 
