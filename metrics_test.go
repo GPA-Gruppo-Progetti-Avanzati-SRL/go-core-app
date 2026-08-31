@@ -65,13 +65,26 @@ func TestServerMetrics_PprofAbilitato(t *testing.T) {
 	if got := status(t, base+"/debug/pprof/goroutineleak?debug=1"); got != http.StatusOK {
 		t.Errorf("/debug/pprof/goroutineleak: status %d, atteso 200", got)
 	}
-	// /metrics non è asseribile qui: ogni NewServerMetrics registra il collector sul registry
-	// Prometheus di default, quindi dalla seconda chiamata nello stesso processo lo scrape
-	// risponde 500 per collector duplicato. È un limite preesistente (ERRORI.md, metrics.go),
-	// fuori dallo scope di §4.6; la copertura di /metrics sta nel test dei default, che gira per
-	// primo.
+	// /metrics deve restare servito anche quando pprof è acceso, e anche se questo è il secondo
+	// NewServerMetrics del processo: il MeterProvider è inizializzato una volta sola, altrimenti
+	// il registry Prometheus avrebbe le metric family duplicate e lo scrape risponderebbe 500.
+	if got := status(t, base+"/metrics"); got != http.StatusOK {
+		t.Errorf("/metrics deve restare servito: status %d", got)
+	}
 	if got := status(t, base+"/health"); got != http.StatusOK {
 		t.Errorf("/health deve restare servito: status %d", got)
+	}
+}
+
+// TestServerMetrics_ScrapeReggeChiamateRipetute: il MeterProvider è stato globale di processo, e
+// registrarlo due volte duplicava le metric family → 500 allo scrape. È il caso che `go test
+// -count=2` della CI riproduce, quindi va asserito qui e non lasciato scoprire alla pipeline.
+func TestServerMetrics_ScrapeReggeChiamateRipetute(t *testing.T) {
+	for i := range 3 {
+		base := startMetrics(t, MetricsConfig{Port: freePort(t)})
+		if got := status(t, base+"/metrics"); got != http.StatusOK {
+			t.Fatalf("/metrics alla chiamata %d: status %d, atteso 200", i+1, got)
+		}
 	}
 }
 

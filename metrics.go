@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sync"
 	"time"
 
 	"github.com/prometheus/client_golang/prometheus/promhttp"
@@ -42,6 +43,42 @@ func (c MetricsConfig) withDefaults() MetricsConfig {
 	return c
 }
 
+// meterProviderOnce protegge l'inizializzazione del MeterProvider, che è **stato globale di
+// processo**: l'exporter si registra sul registry Prometheus di default e otel.SetMeterProvider
+// installa il provider globale. Farlo due volte non è "due server ops" ma un registry con le
+// metric family duplicate, quindi uno scrape che risponde 500 — cioè il monitoraggio spento
+// proprio nel processo che credeva di averlo acceso.
+var (
+	meterProviderOnce sync.Once
+	meterProviderErr  error
+)
+
+func initMeterProvider() error {
+	meterProviderOnce.Do(func() {
+		promExporter, err := prometheus.New(prometheus.WithoutScopeInfo())
+		if err != nil {
+			meterProviderErr = fmt.Errorf("metrics: prometheus exporter: %w", err)
+			return
+		}
+
+		res, err := resource.Merge(resource.Default(),
+			resource.NewWithAttributes(
+				semconv.SchemaURL,
+				semconv.ServiceVersion(BuildVersion),
+			))
+		if err != nil {
+			meterProviderErr = fmt.Errorf("metrics: resource merge: %w", err)
+			return
+		}
+
+		otel.SetMeterProvider(metric.NewMeterProvider(
+			metric.WithReader(promExporter),
+			metric.WithResource(res),
+		))
+	})
+	return meterProviderErr
+}
+
 // NewServerMetrics espone il server ops del processo: /metrics (Prometheus), /health e — solo se
 // `metrics.pprof: true` — /debug/pprof/*.
 //
@@ -49,29 +86,14 @@ func (c MetricsConfig) withDefaults() MetricsConfig {
 // ciò che ci si aspetta da un misconfig. Il listener è aperto dentro OnStart e l'errore è
 // propagato: prima l'esito di ListenAndServe finiva in un blocco vuoto, quindi una porta occupata
 // era silenzio totale e il processo restava "sano" senza servire nulla.
+//
+// Il MeterProvider è inizializzato una volta sola per processo (vedi initMeterProvider): il
+// registry Prometheus è globale, quindi è l'unica semantica che non rompe /metrics.
 func NewServerMetrics(lc fx.Lifecycle) error {
 
-	promExporter, err := prometheus.New(prometheus.WithoutScopeInfo())
-	if err != nil {
-		return fmt.Errorf("metrics: prometheus exporter: %w", err)
+	if err := initMeterProvider(); err != nil {
+		return err
 	}
-
-	res, err := resource.Merge(resource.Default(),
-		resource.NewWithAttributes(
-			semconv.SchemaURL,
-			semconv.ServiceVersion(BuildVersion),
-		))
-
-	if err != nil {
-		return fmt.Errorf("metrics: resource merge: %w", err)
-	}
-
-	provider := metric.NewMeterProvider(
-		metric.WithReader(promExporter),
-		metric.WithResource(res),
-	)
-
-	otel.SetMeterProvider(provider)
 
 	cfg := metricsConfig.withDefaults()
 

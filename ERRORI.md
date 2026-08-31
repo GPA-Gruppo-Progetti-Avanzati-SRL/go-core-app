@@ -71,7 +71,8 @@ errori di programmazione.
 | Tag DI illegali o struct non sintetizzabile | `modules_synth.go:63,93,99,147,153,177,190,197,205,209` | **panic al wiring** (`prop:`+`inject:`, `from:` con nome, tag su campo non esportato, `core.In` in una struct data a `ProvideStruct`, dipendenza mancante nel grafo) |
 | Binding delle properties | `props.go:117,139,175,178,191` | errore risalito dal wiring: property non convertibile o campo `prop:` non esportato |
 | Eredità fra livelli di config | `inherit.go:47,61,108,170` | **panic**: tipo non gestito da `core.Inherit`/`core.IsZeroStruct`. Il silenzio alternativo sarebbe un campo che non eredita senza che nulla lo segnali |
-| Registrazione delle metriche | `metrics.go:24,34` | **panic**: un collector Prometheus duplicato è un errore di wiring |
+| Registrazione delle metriche | `metrics.go:60,70` | `error` (non più **panic**): `NewServerMetrics` è un invoke fx, quindi l'errore ferma l'avvio. Il collector duplicato non si verifica più — il MeterProvider è inizializzato una volta sola per processo (`initMeterProvider`), perché il registry Prometheus è globale |
+| Avvio del server ops | `metrics.go:122` | `error`: bind fallito su `metrics.host:port` (porta occupata). Prima l'esito di `ListenAndServe` finiva in un blocco vuoto e il processo restava "sano" senza servire nulla |
 | Parsing del `sort` | `page/sort.go:46,56` | `error` semplice, ritornato a chi chiama `page.ParseSort`; go-core-api lo trasforma in `ERR-SORT` |
 | Cifratura | `crypt.go:60` | `ciphertext too short`: `error` semplice |
 | Paginazione incoerente | `page/pagingMetaData.go:195,205` | **panic** `invalid current page`: stato interno impossibile, non un input utente |
