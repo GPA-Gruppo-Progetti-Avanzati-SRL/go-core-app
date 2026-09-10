@@ -77,6 +77,21 @@ func Boot[A, S any](app App) *S {
 		log.Fatal().Msgf("invalid MODE %q: expected one of %v", Mode, app.Modes)
 	}
 
+	// Le regole che i tag del validator non sanno esprimere: ogni sezione che implementa
+	// IValidate le verifica qui, PRIMA del Supply, così una config incoerente non entra nemmeno
+	// nel grafo fx. Farlo con un core.Invoke nell'app funzionerebbe — gli invoke girano prima dei
+	// Module — ma sarebbe convenzione e non garanzia: dipenderebbe dall'ordine di registrazione,
+	// sarebbe dimenticabile, e l'errore uscirebbe inquadrato nel grafo delle dipendenze invece
+	// che come un Fatal come tutti gli altri. Qui esiste UN solo momento in cui "la
+	// configurazione è valida" diventa vero.
+	for _, section := range []any{&cfg.App, &cfg.Services} {
+		if v, ok := section.(IValidate); ok {
+			if err := v.Validate(); err != nil {
+				log.Fatal().Err(err).Msg("configurazione non valida")
+			}
+		}
+	}
+
 	// *A è la config applicativa: la iniettano data layer, business e task runner. È l'unico Supply
 	// identico in tutte le app, quindi lo fa Boot e non compare più in main(). La sezione services
 	// NON si fornisce: nessuno inietta l'aggregato, sono i singoli *.Module a prendersi il loro

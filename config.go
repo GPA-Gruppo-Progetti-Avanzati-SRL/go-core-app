@@ -144,7 +144,9 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 	}
 
 	if errValidate := ValidateStruct(config); errValidate != nil {
-		log.Err(errValidate).Msgf("%v", config)
+		// NON si logga la config: a questo punto i ${...} sono già risolti, quindi il dump
+		// conterrebbe password e DSN in chiaro. Il messaggio del Fatal nomina già i campi
+		// invalidi, che è l'unica cosa che serve per correggere il file.
 		log.Fatal().Err(errValidate).Msgf("error validating config, %v", errValidate)
 	}
 

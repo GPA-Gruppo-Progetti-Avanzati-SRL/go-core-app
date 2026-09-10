@@ -91,6 +91,58 @@ func TestBoot(t *testing.T) {
 	})
 }
 
+// TestBootValidaLeSezioni: la validazione delle regole non esprimibili coi tag non è più un
+// core.Invoke dell'app — dimenticabile e dipendente dall'ordine di registrazione — ma un
+// passaggio di Boot, su ENTRAMBE le sezioni e prima che la config entri nel grafo fx.
+func TestBootValidaLeSezioni(t *testing.T) {
+	resetLists()
+	saveIdentity(t)
+
+	// I contatori stanno in due variabili di package raggiunte dai metodi: Boot decodifica la
+	// config in una struct sua, quindi non c'è un'istanza del test da ispezionare dopo.
+	var app, services int
+	bootValidateApp, bootValidateServices = &app, &services
+	t.Cleanup(func() { bootValidateApp, bootValidateServices = nil, nil })
+
+	Boot[bootValidateAppConfig, bootValidateServicesConfig](App{
+		Name:       "boot-validate-test",
+		ConfigFile: []byte(bootConfigYAML),
+	})
+
+	if app != 1 {
+		t.Errorf("Validate() sulla sezione app chiamata %d volte, attesa 1", app)
+	}
+	if services != 1 {
+		t.Errorf("Validate() sulla sezione services chiamata %d volte, attesa 1", services)
+	}
+}
+
+// Le due sezioni del test sopra: implementano IValidate con receiver a puntatore, come lo
+// trova Boot (che fa la type assertion su &cfg.App / &cfg.Services).
+var bootValidateApp, bootValidateServices *int
+
+type bootValidateAppConfig struct {
+	Greeting string `mapstructure:"greeting"`
+}
+
+func (c *bootValidateAppConfig) Validate() error {
+	if bootValidateApp != nil {
+		*bootValidateApp++
+	}
+	return nil
+}
+
+type bootValidateServicesConfig struct {
+	Mongo bootMongoConfig `mapstructure:"mongo"`
+}
+
+func (s *bootValidateServicesConfig) Validate() error {
+	if bootValidateServices != nil {
+		*bootValidateServices++
+	}
+	return nil
+}
+
 func TestFillBuildInfoNonSovrascriveIldflags(t *testing.T) {
 	saveIdentity(t)
 
