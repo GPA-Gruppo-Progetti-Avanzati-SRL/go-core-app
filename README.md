@@ -93,6 +93,29 @@ config:
 ```
 
 Le struct usano i tag `yaml:` + `mapstructure:` (+ `validate:` per la validazione all'avvio).
+Negli errori il campo è nominato con la sua chiave `mapstructure` — `dataType`, non `DataType`:
+è la riga dello YAML da correggere.
+
+### Regole che i tag non esprimono — `IValidate`
+
+Riferimenti incrociati fra sezioni, regole condizionate dal tipo di un'entità referenziata,
+coerenza fra liste: cose che nessun tag `validate:` sa dire. La sezione che ne ha implementa
+
+```go
+type IValidate interface{ Validate() error }
+```
+
+e `Boot` la chiama **dopo `ReadConfig` e prima del `Supply`**, su entrambe le sezioni (`app` e
+`services`), fermando l'avvio con un `Fatal` se l'errore non è nil. È opzionale: `Boot` fa una
+type assertion, quindi le app che non ne hanno bisogno non cambiano nulla.
+
+Con più violazioni conviene aggregarle (`errors.Join`) invece di far scoprire la seconda solo
+dopo aver corretto la prima.
+
+> Non serve — e non va scritto — un `core.Invoke(func(cfg *AppConfig) error { return cfg.Validate() })`
+> in `main()`: funzionerebbe (gli invoke girano prima dei `Module`), ma sarebbe convenzione e non
+> garanzia — dipende dall'ordine di registrazione, è dimenticabile, e l'errore uscirebbe inquadrato
+> nel grafo fx invece che come un Fatal come tutti gli altri.
 
 > **Attenzione alle maiuscole:** viper abbassa ricorsivamente le chiavi (`selfFeed:` nello YAML
 > arriva come `selffeed`). Per questo `core.Properties` e `BindProps` confrontano le chiavi
@@ -383,7 +406,11 @@ if appErr := core.ValidateStruct(input); appErr != nil {
 
 Ritorna un `ApplicationError` con codice `ERR_VALIDATION` che **conserva la causa**: la
 `validator.ValidationErrors` originale è recuperabile con `errors.As`, senza parsare il messaggio.
-La validazione della config all'avvio passa da qui.
+La validazione della config all'avvio passa da qui; le regole che i tag non sanno esprimere
+passano invece da `IValidate` (vedi "Configurazione").
+
+Il nome del campo negli errori è la chiave `mapstructure` quando c'è (`dataType`), il nome Go
+altrimenti — i DTO delle API, che i tag `mapstructure` non li hanno, non cambiano.
 
 ---
 
