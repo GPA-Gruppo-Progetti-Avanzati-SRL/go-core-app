@@ -61,10 +61,9 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 			log.Info().Str("cfg-file-name", configPath).Msg("reading config")
 			cfgContent, rerr := util.ReadFileAndResolveEnvVars(configPath)
 			if rerr != nil {
-				return err
-			} else {
-				cfgFileReader = strings.NewReader(string(cfgContent))
+				return rerr
 			}
+			cfgFileReader = strings.NewReader(string(cfgContent))
 
 		} else {
 			return fmt.Errorf("the %s env variable has been set but no file cannot be found at %s", ConfigFileEnvVar, configPath)
