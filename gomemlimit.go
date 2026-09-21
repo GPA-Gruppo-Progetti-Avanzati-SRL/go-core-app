@@ -19,15 +19,19 @@ import (
 // memlimit.ErrNoLimit, che memlimit.Set tratta come successo impostando
 // GOMEMLIMIT a math.MaxInt64 (cioè il default di Go: nessun limite).
 //
-// Tutto il logging della libreria è instradato su zerolog a livello trace,
-// così non appare al livello di log di default: l'eventuale errore di Set è
-// già loggato da memlimit tramite quel logger, e non è fatale — GOMEMLIMIT
-// resta al valore precedente.
+// Tutto il logging della libreria è instradato su zerolog a livello trace, così
+// non appare al livello di log di default. L'errore di Set però non resta lì: non
+// è fatale — GOMEMLIMIT resta al valore precedente, cioè nessun limite — ma in un
+// container significa che il GC non sa quanta memoria ha, ed è la premessa di un
+// OOMKill che poi non si spiega. Il caso normale fuori da un cgroup non passa di
+// qui: cgroupOnlyProvider lo traduce in ErrNoLimit, che Set tratta come successo.
 func init() {
-	memlimit.Set(
+	if _, err := memlimit.Set(
 		memlimit.WithProvider(cgroupOnlyProvider),
 		memlimit.WithLogger(slog.New(zerologTraceHandler{logger: log.Logger})),
-	)
+	); err != nil {
+		log.Warn().Err(err).Msg("GOMEMLIMIT non impostato: il GC non conosce il limite di memoria del cgroup")
+	}
 }
 
 // cgroupOnlyProvider ritorna il limite del cgroup; se il processo non è dentro

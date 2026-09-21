@@ -20,7 +20,11 @@ func Exec[T ITaskRunner](runner T, shutdowner fx.Shutdowner) {
 		log.Info().Msgf("Executing")
 		runner.Execute()
 		log.Info().Msg("Stopping")
-		shutdowner.Shutdown()
+		// Se lo shutdown non parte il task ha finito ma il processo resta su: senza questa riga
+		// sarebbe un appeso senza spiegazione.
+		if err := shutdowner.Shutdown(); err != nil {
+			log.Error().Err(err).Msg("Shutdown dell'applicazione fallito: il processo resta attivo")
+		}
 	}()
 }
 
@@ -103,7 +107,13 @@ func autoDefineFlags() {
 		addFlag(flagDef)
 
 		if required := field.Tag.Get("required"); required == "true" {
-			Task.MarkFlagRequired(flagDef.name)
+			// Fallisce solo se il flag non esiste, cioè se il tag `mapstructure` è vuoto o non
+			// corrisponde: un difetto della struct di config, che senza questa riga si manifesta
+			// come un flag obbligatorio che non viene mai preteso.
+			if err := Task.MarkFlagRequired(flagDef.name); err != nil {
+				log.Error().Err(err).Str("flag", flagDef.name).Str("campo", field.Name).
+					Msg("flag required non applicato")
+			}
 		}
 	}
 }
