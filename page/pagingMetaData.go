@@ -108,7 +108,7 @@ func (p *Paging) Paging() (int, *core.ApplicationError) {
 	}
 
 	// Set offset and limit
-	var offset int = (pageNumber - 1) * pageSize
+	offset := (pageNumber - 1) * pageSize
 
 	return offset, nil
 }
