@@ -335,39 +335,10 @@ I **default** non passano da qui e restano espliciti — lì il valore è specif
 
 ---
 
-## Lock distribuito — `core/lock`
+## Lock distribuito
 
-`lock.Locker` è la primitiva neutra, indipendente da qualsiasi backend e da qualsiasi scheduler:
-
-```go
-type Locker interface {
-    Acquire(ctx context.Context, key string, opts ...AcquireOption) (Handle, error)
-}
-
-type Handle interface {
-    Release(ctx context.Context) error
-    Extend(ctx context.Context) error   // rinnova il TTL, ErrLockLost se perso
-}
-```
-
-Senza opzioni fa **un solo tentativo non bloccante** e ritorna `lock.ErrNotAcquired` in contesa —
-la semantica dispatch-dedup su cui si appoggia lo scheduler batch. Le opzioni coprono la mutua
-esclusione di una sezione critica:
-
-| Option | Effetto |
-|---|---|
-| `WithTries(n)` | `n > 1` rende `Acquire` bloccante, con retry sulla contesa |
-| `WithRetryDelay(d)` | attesa fra i tentativi |
-| `WithExpiry(d)` | TTL del lock (0 = default del backend) |
-| `WithWait(total, delay)` | comodità: `Tries = total/delay`, `RetryDelay = delay` |
-
-Le implementazioni sono nei subpackage `locker/` opt-in dei backend:
-[`go-core-redis/locker`](../go-core-redis) (redsync/Redlock),
-[`go-core-mongo/locker`](../go-core-mongo) (documento lease con TTL),
-[`go-core-sql/locker`](../go-core-sql) (tabella `scheduler_locks`).
-`go-core-batch` consuma solo l'interfaccia (`batch.WithLocker`) e la adatta a gocron internamente.
-
----
+Non è più qui: sta in **`go-core-locker`**, che ha un solo motore e quattro backend
+(mongo, sql, redis, in-process) più la suite di conformità che li tiene allineati.
 
 ## Paginazione e sort — `core/page`
 
