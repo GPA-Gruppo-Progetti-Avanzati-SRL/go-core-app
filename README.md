@@ -37,7 +37,7 @@ func main() {
         Modes:        []string{engine.Api, engine.Worker}, // vuoto = app single-mode
     })
 
-    coremongo.Module(&svc.Mongo, coremongo.WithAuthorization())
+    coremongo.Module(&svc.Mongo)
     coreapi.Module(&svc.Api, coreapi.WithRoutes(routes.Register))
 
     core.Run(core.WithTracing())
@@ -382,15 +382,11 @@ e go-core-sql riempiono, e che `coreapi.GeneratePageResponse` traduce negli head
 
 ---
 
-## Autorizzazione — `core/authorization`
+## Autorizzazione
 
-`authorization.Authorizer` è l'interfaccia RBAC neutra (`Match`, `MatchRequest`, `GetContexts`,
-`GetApps`, `GetCapabilities`, `HasCapability`, …). Due implementazioni:
-
-- **`ConfigAuthorizer`** — regole da file/config (`NewConfigAuthorizerFromFile`, `NewConfigAuthorizerFromConfig`);
-- **LUT su Mongo** — `go-core-mongo` con `coremongo.WithAuthorization()`, alimentata dalla collection ACL.
-
-Il middleware che la consuma sta in `go-core-api`.
+Non è più qui: sta in **`go-core-auth`**, che ha un solo engine e tre sorgenti di ACL
+(mongo, sql, yaml) più il middleware HTTP. Da qui è uscita anche la dipendenza diretta da
+`go.yaml.in/yaml/v3`, che aveva quel solo utente.
 
 ---
 
