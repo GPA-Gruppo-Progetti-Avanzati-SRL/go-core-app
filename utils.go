@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -35,40 +34,6 @@ func GetTimestamp() string {
 	date := time.Now()
 	stringDate := date.Format("20060102150405")
 	return stringDate
-}
-
-// ConvertStringToTimeDate interpreta una data "yyyy-mm-dd" nel fuso locale.
-//
-// Deprecated: usare StringToDate, che fa lo stesso lavoro con time.ParseInLocation. Questa
-// versione compone i campi con time.Date, che normalizza invece di rifiutare: "2026-13-40"
-// diventa il 9 febbraio 2027 senza errore.
-func ConvertStringToTimeDate(input string) (time.Time, error) {
-	// data stringa con formato "yyyy-mm-dd"
-	// Separiamo anno, mese e giorno dalla stringa
-	parts := strings.Split(input, "-")
-	if len(parts) != 3 {
-		return time.Time{}, fmt.Errorf("formato non valido: %s", input)
-	}
-
-	// Convertiamo i valori in interi
-	year, err := strconv.Atoi(parts[0])
-	if err != nil {
-		return time.Time{}, fmt.Errorf("anno non valido: %v", err)
-	}
-
-	month, err := strconv.Atoi(parts[1])
-	if err != nil {
-		return time.Time{}, fmt.Errorf("mese non valido: %v", err)
-	}
-
-	day, err := strconv.Atoi(parts[2])
-	if err != nil {
-		return time.Time{}, fmt.Errorf("giorno non valido: %v", err)
-	}
-
-	// Creiamo l'oggetto time.Time con time.Date
-	date := time.Date(year, time.Month(month), day, 0, 0, 0, 0, time.Local)
-	return date, nil
 }
 
 // ErrDateParse: stringa non conforme a DateFormat. Sostituisce il codice segnaposto "99999",

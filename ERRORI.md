@@ -44,6 +44,9 @@ Ambit: `go-core-app` (costante `core.Ambit`).
   `Message` è vuoto. Le librerie costruiscono i propri errori con **`core.Errors{Ambit}`**
   (`Tech`/`Business`/`NotFound`), che sostituisce gli helper `techErr`/`notFound` scritti a mano e
   le catene `TechnicalError().WithAmbit(...).WithCode(...)` ripetute a ogni sito.
+  **Rimossi** (breaking): `page.Page`/`PagingItems` (paginazione in memoria, panicava con
+  `pageSize` 0 o pagina fuori range; la paginazione si fa con `Paging.Paging()`) e
+  `core.ConvertStringToTimeDate` (duplicato di `StringToDate` che accettava `2026-13-40`).
 
 - **`99999` non esiste più**: era un segnaposto che non diceva nulla a chi lo riceveva →
   `ERR-DATE`. L'`Ambit` era `"Utils Methods - StringToDate"`; ora è `go-core-app` e il

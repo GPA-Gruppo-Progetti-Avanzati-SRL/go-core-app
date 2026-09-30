@@ -510,7 +510,7 @@ non un panic.
 
 `core.Encrypt`/`core.Decrypt` (AES-GCM; `Decrypt` prende l'**hex** di ciò che `Encrypt` ritorna —
 è il formato del token di go-core-auth), le conversioni data/ora (`StringToDate`, `DateToString`,
-`NowTime`, `GetMidnight`, …; `ConvertStringToTimeDate` è deprecata in favore di `StringToDate`),
+`NowTime`, `GetMidnight`, …),
 `core.GetHostname` (letto una volta, `"unknown"` se il sistema non lo dà — è la stessa fonte di
 `locked_by`/`executed_by` e di `task_logs.hostname` in go-core-batch), `core.FormatBytes`.
 
