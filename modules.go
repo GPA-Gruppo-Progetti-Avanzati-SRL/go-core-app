@@ -159,6 +159,21 @@ func ModuleClosed(name string, register func()) {
 
 func buildModule(name string, register func(), closed bool) {
 	prev := current
+	// Dentro un sottosistema chiuso il confine è il suo: un Module scritto lì dentro ne condivide lo
+	// scope, quindi le sue registrazioni sono private come quelle del sottosistema. Prima finiva a
+	// root come modulo fratello, e ciò che era stato scritto dentro il confine diventava iniettabile
+	// dall'app. Non si apre un fx.Module figlio perché fx non sa esprimere "esportato al solo
+	// genitore": un Provide non privato di un figlio sale fino a root, uno privato non lo vedrebbe
+	// nemmeno il sottosistema che lo contiene.
+	if prev != nil && prev.closed {
+		prevPrivate := inPrivate
+		inPrivate = false
+		func() {
+			defer func() { inPrivate = prevPrivate }()
+			register()
+		}()
+		return
+	}
 	// Un Module annidato dentro una closure Private apre un proprio scope: la privatezza vale per
 	// il modulo che l'ha dichiarata, non si eredita in quello nuovo (che ha il suo confine).
 	prevPrivate := inPrivate
@@ -197,6 +212,12 @@ func buildModule(name string, register func(), closed bool) {
 		opts = append(opts, fx.Provide(append(ms.privates, fx.Private)...))
 	}
 	opts = append(opts, ms.invokes...)
+	// Annidato in un Module aperto è un figlio suo, non un fratello a root: ne vede i Provide
+	// privati (fx.Private vale per il modulo e i suoi discendenti) e compare sotto di lui nel grafo.
+	if prev != nil {
+		prev.invokes = append(prev.invokes, fx.Module(name, opts...))
+		return
+	}
 	modulelist = append(modulelist, fx.Module(name, opts...))
 }
 

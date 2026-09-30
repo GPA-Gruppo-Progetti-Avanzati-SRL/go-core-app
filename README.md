@@ -286,6 +286,13 @@ e un `Supply` a root convive con l'omonimo privato di un modulo (che vince per i
 `batch.Module`, `coreapi.Module` e `corekafka.Module` usano già `ModuleClosed` internamente — non
 ri-avvolgerli a mano.
 
+**Annidamento.** Un `Module` scritto dentro un `ModuleClosed` sta **dentro il confine**: ne condivide lo
+scope, quindi ciò che registra è privato al sottosistema come il resto (non si apre un `fx.Module` figlio,
+perché fx non sa esprimere "esportato al solo genitore"). Un `Module` annidato in un `Module` aperto è
+suo **figlio**: ne vede i `Provide` privati e compare sotto di lui nel grafo. Prima entrambi finivano a
+root come moduli fratelli, e ciò che era stato scritto dentro un sottosistema chiuso diventava
+iniettabile dall'app.
+
 #### `core.Private` — granularità dentro un `Module`
 
 ```go

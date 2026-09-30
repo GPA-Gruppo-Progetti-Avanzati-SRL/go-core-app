@@ -171,6 +171,65 @@ func TestModuleClosedProvidesPrivate(t *testing.T) {
 	})
 }
 
+// Un Module scritto dentro un ModuleClosed sta dentro il confine: ciò che registra lo vede il
+// sottosistema e non l'app. Prima finiva a root come modulo fratello, quindi iniettabile.
+func TestModuleAnnidatoInModuleClosed(t *testing.T) {
+	t.Run("consumer a root non lo vede", func(t *testing.T) {
+		resetLists()
+		ModuleClosed("batch", func() {
+			Module("driver", func() { Provide(func() *svcConfig { return &svcConfig{Url: "interno"} }) })
+		})
+		Invoke(func(*svcConfig) {})
+		if err := fx.New(provides(), invokes(), fx.Options(modulelist...)).Err(); err == nil {
+			t.Fatal("fx.New senza errore: il Module annidato è iniettabile a root")
+		}
+	})
+
+	t.Run("il sottosistema lo vede", func(t *testing.T) {
+		resetLists()
+		var got string
+		ModuleClosed("batch", func() {
+			Module("driver", func() { Provide(func() *svcConfig { return &svcConfig{Url: "interno"} }) })
+			Invoke(func(s *svcConfig) { got = s.Url })
+		})
+		app := fx.New(provides(), fx.Options(modulelist...))
+		if err := app.Err(); err != nil {
+			t.Fatalf("fx.New error: %v", err)
+		}
+		startStop(t, app)
+		if got != "interno" {
+			t.Fatalf("visto dal sottosistema = %q, want interno", got)
+		}
+	})
+}
+
+// Un Module annidato in un Module aperto è suo figlio: vede i Provide privati del genitore, e i
+// propri Provide restano esportati come quelli di ogni Module.
+func TestModuleAnnidatoInModule(t *testing.T) {
+	resetLists()
+	type interno struct{ v string }
+	var got string
+	Module("padre", func() {
+		Private(func() { Provide(func() *interno { return &interno{v: "privato del padre"} }) })
+		Module("figlio", func() {
+			Provide(func(i *interno) *svcConfig { return &svcConfig{Url: i.v} })
+		})
+	})
+	Invoke(func(s *svcConfig) { got = s.Url })
+
+	app := fx.New(provides(), invokes(), fx.Options(modulelist...))
+	if err := app.Err(); err != nil {
+		t.Fatalf("fx.New error: %v", err)
+	}
+	startStop(t, app)
+	if got != "privato del padre" {
+		t.Fatalf("got %q", got)
+	}
+	if len(modulelist) != 1 {
+		t.Fatalf("moduli a root = %d, want 1 (il figlio sta dentro il padre)", len(modulelist))
+	}
+}
+
 // TestModuleClosedSeesRoot: dentro un sottosistema chiuso i seam dell'app restano visibili — il
 // business/data layer per tipo e i membri di value group forniti a root (handler kafka, runner batch).
 func TestModuleClosedSeesRoot(t *testing.T) {
