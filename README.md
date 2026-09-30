@@ -6,7 +6,7 @@
 
 ---
 
-Libreria base delle applicazioni GPA (package `core`): boot, configurazione YAML, error handling,
+Libreria base delle applicazioni GPA (package radice `core` più un package per dominio, vedi *Struttura del modulo*): boot, configurazione YAML, error handling,
 dependency injection su [uber/fx](https://uber-go.github.io/fx/), logging zerolog, validazione,
 metriche OpenTelemetry/Prometheus, tracing, CLI cobra, HTTP client strumentato.
 
@@ -14,6 +14,44 @@ metriche OpenTelemetry/Prometheus, tracing, CLI cobra, HTTP client strumentato.
 `go-core-sql`, `go-core-redis`, `go-core-batch`, `go-core-kafka`.
 
 **Richiede Go 1.27+.**
+
+---
+
+## Struttura del modulo
+
+Dal 2026-09-30 il modulo non è più un unico package piatto: la radice `core` tiene il **runtime
+dell'app** — boot, config, registry fx, errori, validazione — e il resto sta in un package per
+dominio. I simboli **non hanno cambiato nome**, solo qualificatore (`core.Properties` →
+`properties.Properties`), con una sola eccezione: **`core.ApplicationError` si chiama `core.Error`**.
+
+| Import (`go-core-app/...`) | Package | Contenuto |
+|---|---|---|
+| *(radice)* | `core` | `Boot`/`App`, `Run`/`Start`, `WithTracing`/`WithServerMetrics`, `ReadConfig`/`Config`, `Mode`/`IsMode`, registry fx (`Provide*`, `Supply`, `Invoke`, `Populate`, `Module`, `ModuleClosed`, `Private`, `ProvideStruct`, `In`/`Out`), identità (`AppName`, `Logo`, `BuildVersion`, `SHA`, `BuildDate`), **errori** (`Error`, `TechnicalError`/`BusinessError`/`NotFoundError`, `AmbitErrors`, `Field`/`F`, `Ambit`), **validazione** (`ValidateStruct`, `IValidate`, `Validator`, `Translator`, `ErrValidation`), `FormatBytes`, `DateFormat`/`DateTimeFormat`/`DateTimeZoneFormat` |
+| `properties` | `properties` | `Properties`, `BindProps`, `Inherit`, `IsZeroStruct`, i tag `PropTag`/`DefaultTag`/`ValidateTag` |
+| `observability` | `observability` | server ops (`NewServerMetrics`, `MetricsConfig`, `MetricsSettings`), `NewTracer`/`Tracer`, `MetricLogHook`, `SlogHandler`, `ProfilingHandler`, `HealthHandler`, GOMEMLIMIT dal cgroup |
+| `httpx` | `httpx` | `GenerateHttpClientWithInstrumentation`, `AddEndpointNameMetrics`, `DefaultHttpClientTimeout`, `ServeOnLifecycle`, `WaitContext` |
+| `cli` | `cli` | `Execute`, `Exec`, `ITaskRunner`, `Task`, `TaskConfig`, `FlagDefinition` — l'unico che porta cobra |
+| `utils` | `utils` | `Encrypt`/`Decrypt`, i date helper e `ErrDateParse`, `ConcurrentTwo`/`ConcurrentN`/`ErrConcurrentPanic`, `TaggedFields`, `GetHostname`/`UnknownHostname` |
+| `page` | `page` | paginazione e sort (invariato) |
+
+**Grafo degli import.** La radice importa `properties` e `observability`; loro non importano la
+radice. `utils`, `page` e `cli` importano la radice (ritornano un `*core.Error`), e la radice non
+importa loro. I due package che la radice importa e che hanno bisogno di qualcosa che vive qui lo
+ricevono da una sorgente installata dall'`init()` di `core.go`: `observability` l'identità dell'app
+(`service.name`/`service.version`), `properties` il `Validator` — così una `RegisterValidation`
+fatta dall'app su `core.Validator` vale anche per i tag `validate:` dei campi `prop:`. I `-X`
+ldflags restano su `go-core-app.BuildVersion`/`SHA`/`BuildDate`.
+
+**Migrazione.** `scripts/migrate-split.sh <dir>` riscrive i qualificatori di tutti i `.go` sotto
+`<dir>` secondo la tabella qui sopra, aggiunge gli import dei subpackage usati e passa goimports.
+Riconosce l'alias con cui il file importa la radice (`core`, `coreapp`, ...). Poi `go build ./...`:
+una variabile locale che si chiama come un package nuovo (`properties`, `utils`) è un errore di
+compilazione da sistemare a mano.
+
+```bash
+../go-core/go-core-app/scripts/migrate-split.sh .   # dalla root dell'app
+go build ./...
+```
 
 ---
 
@@ -121,14 +159,14 @@ dopo aver corretto la prima.
 > nel grafo fx invece che come un Fatal come tutti gli altri.
 
 > **Attenzione alle maiuscole:** viper abbassa ricorsivamente le chiavi (`selfFeed:` nello YAML
-> arriva come `selffeed`). Per questo `core.Properties` e `BindProps` confrontano le chiavi
+> arriva come `selffeed`). Per questo `properties.Properties` e `BindProps` confrontano le chiavi
 > case-insensitive.
 
 ---
 
 ## Error handling
 
-Tutte le funzioni pubbliche ritornano `(*T, *core.ApplicationError)`. L'`ApplicationError` porta
+Tutte le funzioni pubbliche ritornano `(*T, *core.Error)`. L'`ApplicationError` porta
 `StatusCode`, `Ambit`, `Code`, `Message` e una **causa non esportata**.
 
 Il catalogo dei codici emessi da questa libreria è in **[ERRORI.md](ERRORI.md)**. `core.Ambit`
@@ -138,15 +176,15 @@ quindi senza sovrascriverlo un guasto della libreria si presenta come un errore 
 chi legge il log non sa dove guardare. Ogni lib go-core ha la propria costante `Ambit` e il proprio
 `ERRORI.md`.
 
-Dentro una libreria gli errori si costruiscono con **`core.Errors`**, dichiarato una volta per
+Dentro una libreria gli errori si costruiscono con **`core.AmbitErrors`**, dichiarato una volta per
 package, così l'ambito non si può dimenticare sul singolo sito:
 
 ```go
-var liberr = core.Errors{Ambit: Ambit}
+var errs = core.AmbitErrors{Ambit: Ambit}
 
-return liberr.Tech(CodeAcquire).WithCause(err)      // 500
-return liberr.Business(CodeSort).WithCause(err)     // 422
-return liberr.NotFound().WithCause(sql.ErrNoRows)   // 404
+return errs.Tech(CodeAcquire).WithCause(err)      // 500
+return errs.Business(CodeSort).WithCause(err)     // 422
+return errs.NotFound().WithCause(sql.ErrNoRows)   // 404
 ```
 
 `Error()` ritorna il `Message`, o il `Code` se il messaggio è vuoto.
@@ -305,12 +343,12 @@ costruttori scritti a mano passati a `core.Provide`.
 
 ## Properties applicative
 
-`core.Properties` (`map[string]any`) è il blocco di configurazione applicativa — il `properties:` di
+`properties.Properties` (`map[string]any`) è il blocco di configurazione applicativa — il `properties:` di
 un processor Kafka o di un task batch. I valori conservano il tipo YAML nativo; le chiavi sono
 risolte **case-insensitive**.
 
 ```go
-core.BindProps(&target, props)   // mapping sui campi `prop:` (via ProvideStruct nel caso normale)
+properties.BindProps(&target, props)   // mapping sui campi `prop:` (via ProvideStruct nel caso normale)
 
 props.Has("k")
 props.GetString("k", "def")
@@ -328,8 +366,8 @@ default. I getter restano per le properties dinamiche, non strutturate.
 ## Eredità fra livelli di configurazione
 
 ```go
-core.Inherit[T](dst, src *T)   // dst eredita da src, campo per campo
-core.IsZeroStruct[T](v T) bool
+properties.Inherit[T](dst, src *T)   // dst eredita da src, campo per campo
+properties.IsZeroStruct[T](v T) bool
 ```
 
 Implementano l'eredità fra due livelli di config **omologhi** (stesso tipo Go): il blocco globale e
@@ -401,8 +439,8 @@ altrimenti — i DTO delle API, che i tag `mapstructure` non li hanno, non cambi
 ## Concorrenza
 
 ```go
-a, b, appErr := core.ConcurrentTwo(taskA, taskB)                     // due task eterogenei
-res, appErr := core.ConcurrentN(items, 8, func(i T) (R, *core.ApplicationError) { ... })
+a, b, appErr := utils.ConcurrentTwo(taskA, taskB)                     // due task eterogenei
+res, appErr := utils.ConcurrentN(items, 8, func(i T) (R, *core.Error) { ... })
 ```
 
 `ConcurrentN` esegue `fn` su ogni item con al massimo `concurrency` goroutine in parallelo
@@ -415,12 +453,12 @@ l'errore del primo item fallito in ordine di posizione. Un panic di un task dive
 ## HTTP client strumentato
 
 ```go
-client := core.GenerateHttpClientWithInstrumentation("nome-servizio")
-ctx = core.AddEndpointNameMetrics("get-person", ctx)
+client := httpx.GenerateHttpClientWithInstrumentation("nome-servizio")
+ctx = httpx.AddEndpointNameMetrics("get-person", ctx)
 ```
 
 Il client porta trace OTel e metriche per endpoint; `AddEndpointNameMetrics` etichetta la chiamata
-nel context. Ha un timeout per richiesta di `core.DefaultHttpClientTimeout` (30s), sovrascrivibile
+nel context. Ha un timeout per richiesta di `httpx.DefaultHttpClientTimeout` (30s), sovrascrivibile
 con un secondo argomento (`GenerateHttpClientWithInstrumentation("svc", 5*time.Second)`): un
 `http.Client` a zero non ne ha, e un upstream che non risponde bloccava il chiamante per sempre.
 
@@ -435,16 +473,16 @@ type ITaskRunner interface {
     Run(ctx context.Context) error
 }
 
-core.Execute[mioTask]()   // costruisce il comando cobra, flag auto-derivate, esegue e termina
+cli.Execute[mioTask]()   // costruisce il comando cobra, flag auto-derivate, esegue e termina
 ```
 
-`core.TaskConfig` porta la config del task; le flag sono definite automaticamente dai campi.
+`cli.TaskConfig` porta la config del task; le flag sono definite automaticamente dai campi.
 
 ---
 
 ## Metriche, tracing, health
 
-- `core.NewServerMetrics` (via `core.WithServerMetrics`) espone `/metrics` (Prometheus) e `/health`
+- `observability.NewServerMetrics` (via `core.WithServerMetrics`) espone `/metrics` (Prometheus) e `/health`
   su `0.0.0.0:2112`. Indirizzo, `read-header-timeout` e pprof si configurano dalla sezione YAML
   **`metrics:`**, che è **facoltativa** — ometterla dà esattamente `0.0.0.0:2112` con pprof spento:
 
@@ -456,24 +494,24 @@ core.Execute[mioTask]()   // costruisce il comando cobra, flag auto-derivate, es
     read-header-timeout: 5s  # default
   ```
 
-  Con `pprof: true` il server monta `core.ProfilingHandler()`, quindi `/debug/pprof/goroutineleak`
+  Con `pprof: true` il server monta `observability.ProfilingHandler()`, quindi `/debug/pprof/goroutineleak`
   (profilo GA da Go 1.27) diventa raggiungibile su `:2112` e mostra le label del framework
   (`batch_job`, `batch_worker`, `kafka_consumer`). Non è un blank import: `_ "net/http/pprof"`
   registrerebbe su `http.DefaultServeMux`, che questo server non è — gli handler sarebbero
   irraggiungibili e insieme pronti a diventare pubblici se una dipendenza servisse quel mux.
   **In mode API il gate è un altro**: lì la porta è quella pubblica dell'API e pprof si accende
   solo con `develop-mode: true` di `go-core-api`.
-- Il ciclo di vita del server è **`core.ServeOnLifecycle(lc, sh, srv, name)`**, lo stesso usato
+- Il ciclo di vita del server è **`httpx.ServeOnLifecycle(lc, sh, srv, name)`**, lo stesso usato
   da `go-core-api`: listen in `OnStart` (una porta occupata fa fallire l'avvio), `Shutdown` col
   context dell'hook, e un server che muore a regime **fa uscire il processo** (codice 1) invece di
-  lasciarlo vivo senza servire nulla. `core.WaitContext(ctx, &wg)` è l'attesa limitata di un
+  lasciarlo vivo senza servire nulla. `httpx.WaitContext(ctx, &wg)` è l'attesa limitata di un
   `OnStop` (true = drenato, false = deadline scaduta).
-- `core.NewTracer` (via `core.WithTracing`) configura l'export OTLP. Metriche e tracce portano
+- `observability.NewTracer` (via `core.WithTracing`) configura l'export OTLP. Metriche e tracce portano
   `service.name` = `AppName` e `service.version` = `BuildVersion` (`OTEL_SERVICE_NAME` e
   `OTEL_RESOURCE_ATTRIBUTES` vincono sulle tracce).
-- `core.SlogHandler(component)` è uno `slog.Handler` che scrive su zerolog col livello tradotto e il
+- `observability.SlogHandler(component)` è uno `slog.Handler` che scrive su zerolog col livello tradotto e il
   campo `component`: il ponte per le dipendenze che loggano con slog o con un'interfaccia della
-  stessa forma (`gocron.WithLogger(slog.New(core.SlogHandler("gocron")))`).
+  stessa forma (`gocron.WithLogger(slog.New(observability.SlogHandler("gocron")))`).
 - `GOMEMLIMIT` è impostato automaticamente dai limiti del cgroup quando l'app gira in container.
 
 ---
@@ -497,9 +535,9 @@ imposta `core.Boot`. Se i ldflags mancano (build locale), `Boot` riempie i campi
 
 ---
 
-## Filtri a struct taggata — `core.TaggedFields`
+## Filtri a struct taggata — `utils.TaggedFields`
 
-`core.TaggedFields(v, keyTag, opTag)` ritorna i campi di una struct filtro che portano entrambi i
+`utils.TaggedFields(v, keyTag, opTag)` ritorna i campi di una struct filtro che portano entrambi i
 tag (saltando quelli `omitempty` a zero): è lo scheletro dei filter builder di go-core-mongo
 (`field:`/`operator:`) e go-core-sql (`col:`/`op:`). Un campo non esportato con i tag è un errore,
 non un panic.
@@ -508,10 +546,10 @@ non un panic.
 
 ## Utility
 
-`core.Encrypt`/`core.Decrypt` (AES-GCM; `Decrypt` prende l'**hex** di ciò che `Encrypt` ritorna —
+`utils.Encrypt`/`utils.Decrypt` (AES-GCM; `Decrypt` prende l'**hex** di ciò che `Encrypt` ritorna —
 è il formato del token di go-core-auth), le conversioni data/ora (`StringToDate`, `DateToString`,
 `NowTime`, `GetMidnight`, …),
-`core.GetHostname` (letto una volta, `"unknown"` se il sistema non lo dà — è la stessa fonte di
+`utils.GetHostname` (letto una volta, `"unknown"` se il sistema non lo dà — è la stessa fonte di
 `locked_by`/`executed_by` e di `task_logs.hostname` in go-core-batch), `core.FormatBytes`.
 
 ---

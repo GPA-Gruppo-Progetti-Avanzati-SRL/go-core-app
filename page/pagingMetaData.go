@@ -82,7 +82,7 @@ func InitPaging(pagingConfig *Config, pageSize, pageNumber int, totalItems int64
 // If pageSize is set to 0, do not apply paging (get all items) and returns -1.
 // If pageSize and pageNumber are set to a correct value, applies paging and returns the OFFSET.
 // Otherwise, returns error.
-func (p *Paging) Paging() (int, *core.ApplicationError) {
+func (p *Paging) Paging() (int, *core.Error) {
 
 	var pageSize, pageNumber int
 
@@ -173,7 +173,7 @@ func (p *Paging) setTotalPages(totalPages int) {
 }
 
 // Set PageSize
-func (p *Paging) SetPageSize(pageSize int) *core.ApplicationError {
+func (p *Paging) SetPageSize(pageSize int) *core.Error {
 	err := p.validatorPageSize(pageSize)
 	if err != nil {
 		return err
@@ -186,7 +186,7 @@ func (p *Paging) SetPageSize(pageSize int) *core.ApplicationError {
 }
 
 // Set CurrentPage
-func (p *Paging) SetCurrentPage(currentPage int) *core.ApplicationError {
+func (p *Paging) SetCurrentPage(currentPage int) *core.Error {
 	err := validatorPageNumber(currentPage)
 	if err != nil {
 		return err
@@ -236,7 +236,7 @@ func (p *Paging) setHasPrev(hasPrev bool) {
 // per-instance limit is set (Config.MaxPageSize <= 0, or a Paging not built via
 // InitPaging) the immutable FallbackMaxPageSize applies, so the upper bound is
 // never unbounded. param == 0 ("all items") deliberately bypasses the cap.
-func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
+func (p *Paging) validatorPageSize(param int) *core.Error {
 	if param < 0 {
 		return core.BusinessError().WithAmbit(core.Ambit).WithCode(ErrPageSize).
 			WithMessage(fmt.Sprintf("invalid page size %d: must be >= 0", param))
@@ -255,7 +255,7 @@ func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
 }
 
 // Validator for PageNumber
-func validatorPageNumber(param int) *core.ApplicationError {
+func validatorPageNumber(param int) *core.Error {
 
 	if param < 1 {
 		return core.BusinessError().WithAmbit(core.Ambit).WithCode(ErrPageNumber).

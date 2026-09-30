@@ -6,7 +6,7 @@ import (
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app"
 )
 
-// Codici degli errori di paginazione. Il chiamante li riceve in ApplicationError.Code, con
+// Codici degli errori di paginazione. Il chiamante li riceve in core.Error.Code, con
 // Ambit = core.Ambit: sono errori della libreria, non dell'applicazione.
 const (
 	ErrPageConfig  = "ERR-PAGECFG"      // config di paginazione non valida (boot)
@@ -29,7 +29,7 @@ var defaultAppConfig = Config{DefaultPageSize: 10, DefaultPageNumber: 1, MaxPage
 // is copied, so later mutations by the caller have no effect. It returns an
 // error if the defaults are invalid; MaxPageSize <= 0 is allowed and falls back
 // to FallbackMaxPageSize at validation time.
-func Configure(c Config) *core.ApplicationError {
+func Configure(c Config) *core.Error {
 	if c.DefaultPageSize <= 0 || c.DefaultPageNumber <= 0 {
 		return core.TechnicalError().WithAmbit(core.Ambit).WithCode(ErrPageConfig).WithMessage("invalid paging config: default-pagesize and default-pagenumber must be > 0")
 	}

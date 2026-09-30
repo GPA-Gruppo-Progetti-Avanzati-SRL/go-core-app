@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/observability"
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common/util"
 	"github.com/rs/zerolog"
 	"github.com/rs/zerolog/log"
@@ -26,31 +27,9 @@ type Config struct {
 		EnableJSON bool
 		Metric     bool
 	}
-	Metrics   MetricsConfig `yaml:"metrics" mapstructure:"metrics" json:"metrics"`
-	AppConfig any           `yaml:"config" mapstructure:"config" json:"config"`
+	Metrics   observability.MetricsConfig `yaml:"metrics" mapstructure:"metrics" json:"metrics"`
+	AppConfig any                         `yaml:"config" mapstructure:"config" json:"config"`
 }
-
-// MetricsConfig configura il server ops di NewServerMetrics (/metrics, /health e — solo se
-// richiesto — /debug/pprof/*). La sezione `metrics:` è facoltativa: i default di viperDefaults
-// riproducono esattamente il comportamento storico (0.0.0.0:2112, pprof spento), quindi una
-// config che non la nomina non cambia di una virgola.
-type MetricsConfig struct {
-	Host              string        `yaml:"host" mapstructure:"host" json:"host"`
-	Port              int           `yaml:"port" mapstructure:"port" json:"port"`
-	Pprof             bool          `yaml:"pprof" mapstructure:"pprof" json:"pprof"`
-	ReadHeaderTimeout time.Duration `yaml:"read-header-timeout" mapstructure:"read-header-timeout" json:"read-header-timeout"`
-}
-
-// metricsConfig è la sezione `metrics:` letta da ReadConfig. Sta in una var di package per la
-// stessa ragione per cui ci stanno Mode, AppName e BuildVersion: NewServerMetrics è un invoke fx
-// senza parametri di config, e passargliela cambierebbe la firma di WithServerMetrics — cioè
-// costringerebbe ogni app a scrivere un argomento per una sezione che quasi nessuna valorizza.
-var metricsConfig MetricsConfig
-
-// MetricsSettings ritorna la configurazione del server ops effettivamente in uso (default
-// compresi). Esportata perché è l'unico modo, per un'app o un test, di sapere su quale indirizzo
-// il server è stato messo in ascolto senza reimplementare i default.
-func MetricsSettings() MetricsConfig { return metricsConfig }
 
 func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error {
 
@@ -105,9 +84,9 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 		return fmt.Errorf("unable to decode config: %w", err)
 	}
 
-	// La sezione `metrics:` è consumata dalla libreria stessa (NewServerMetrics), esattamente come
-	// `log:` qui sotto: si deposita ora, mentre la struct è viva, perché ReadConfig la scarta.
-	metricsConfig = config.Metrics
+	// La sezione `metrics:` è consumata dalla libreria stessa (observability.NewServerMetrics), esattamente
+	// come `log:` qui sotto: si deposita ora, mentre la struct è viva, perché ReadConfig la scarta.
+	observability.SetMetricsConfig(config.Metrics)
 
 	if !config.Log.Ignore {
 		lvl, err := parseLogLevel(config.Log.Level)
@@ -132,7 +111,7 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 	}
 
 	if config.Log.Metric {
-		log.Logger = log.Logger.Hook(metricLogHook())
+		log.Logger = log.Logger.Hook(observability.SharedMetricLogHook())
 	}
 
 	if errValidate := ValidateStruct(config); errValidate != nil {

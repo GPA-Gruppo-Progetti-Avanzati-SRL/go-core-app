@@ -1,8 +1,10 @@
 package core
 
 import (
+	"strings"
 	"testing"
 
+	"github.com/rs/zerolog"
 	"go.uber.org/fx"
 )
 
@@ -151,5 +153,56 @@ func TestFillBuildInfoNonSovrascriveIldflags(t *testing.T) {
 
 	if BuildVersion != "1.2.3" || SHA != "deadbeef" || BuildDate != "2026-08-25T10:00:00+0200" {
 		t.Fatalf("fillBuildInfo ha sovrascritto i valori del linker: %s %s %s", BuildVersion, SHA, BuildDate)
+	}
+}
+
+func TestParseLogLevel(t *testing.T) {
+	ok := map[string]zerolog.Level{"debug": zerolog.DebugLevel, " INFO ": zerolog.InfoLevel, "3": zerolog.ErrorLevel, "-1": zerolog.TraceLevel}
+	for in, want := range ok {
+		got, err := parseLogLevel(in)
+		if err != nil || got != want {
+			t.Errorf("parseLogLevel(%q) = %v, %v; want %v", in, got, err, want)
+		}
+	}
+	// "" era accettato come NoLevel: il livello globale finiva sopra Fatal e ogni log.Fatal
+	// usciva senza stampare nulla.
+	for _, in := range []string{"", "disabled", "verbose"} {
+		if _, err := parseLogLevel(in); err == nil {
+			t.Errorf("parseLogLevel(%q): atteso errore", in)
+		}
+	}
+}
+
+func keepLogLevel(t *testing.T) {
+	t.Helper()
+	prev := zerolog.GlobalLevel()
+	t.Cleanup(func() { zerolog.SetGlobalLevel(prev) })
+}
+
+func TestReadConfig_SenzaLogLevelResteInfo(t *testing.T) {
+	keepLogLevel(t)
+	zerolog.SetGlobalLevel(zerolog.Disabled)
+	var cfg struct{}
+	if err := ReadConfig("log:\n  metric: false\n", "CORE_TEST_NO_SUCH_ENV", &cfg); err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	if got := zerolog.GlobalLevel(); got != zerolog.InfoLevel {
+		t.Fatalf("livello globale = %v, atteso info", got)
+	}
+}
+
+func TestReadConfig_RitornaGliErrori(t *testing.T) {
+	keepLogLevel(t)
+	var cfg struct{}
+	if err := ReadConfig("log: [non: una: mappa", "CORE_TEST_NO_SUCH_ENV", &cfg); err == nil {
+		t.Fatal("YAML malformato: atteso un errore restituito, non un Fatal")
+	}
+
+	var invalid struct {
+		Name string `mapstructure:"name" validate:"required"`
+	}
+	err := ReadConfig("log:\n  ignore: true\nconfig:\n  other: 1\n", "CORE_TEST_NO_SUCH_ENV", &invalid)
+	if err == nil || !strings.Contains(err.Error(), "name") {
+		t.Fatalf("validazione fallita: atteso un errore che nomini il campo, got %v", err)
 	}
 }
