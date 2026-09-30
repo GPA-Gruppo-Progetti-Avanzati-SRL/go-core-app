@@ -402,6 +402,11 @@ paging := page.InitPaging(nil, pageSize, pageNumber, 0)
 sort, err := page.ParseSort("name:asc,createdAt:desc")
 ```
 
+`ParseSort` accetta solo campi che sono **identificatori** (lettere, cifre, `_`, segmenti separati da
+`.`: `page.ValidSortField`): il sort arriva da un query param e finisce in un `ORDER BY` SQL o in una
+chiave bson. `SortRequest.Validate()` fa lo stesso controllo su una richiesta costruita a mano, ed è
+ciò che chiamano i builder di go-core-sql e go-core-mongo.
+
 `*page.Paging` porta `PageSize`, `CurrentPage`, `TotalCount`, `TotalPages`, `HasNext`, `HasPrevious`
 e li mantiene coerenti (`SetTotalItems`, `IncCurrentPage`, …). È il tipo che i CRUD di go-core-mongo
 e go-core-sql riempiono, e che `coreapi.GeneratePageResponse` traduce negli header di risposta.

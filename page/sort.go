@@ -45,6 +45,9 @@ func ParseSort(raw string) (SortRequest, error) {
 		if field == "" {
 			return nil, fmt.Errorf("sort: empty field name in %q", part)
 		}
+		if !ValidSortField(field) {
+			return nil, fmt.Errorf("sort: invalid field name %q", field)
+		}
 		dir := Asc
 		if len(kv) == 2 {
 			switch strings.ToLower(strings.TrimSpace(kv[1])) {
@@ -59,4 +62,43 @@ func ParseSort(raw string) (SortRequest, error) {
 		result = append(result, SortField{Field: field, Dir: dir})
 	}
 	return result, nil
+}
+
+// ValidSortField dice se name è un nome di campo ordinabile: uno o più identificatori (lettere,
+// cifre, `_`, non iniziano con una cifra) separati da `.` — `name`, `created_at`, `address.city`.
+//
+// Il sort arriva da un query param (`?sort=`), e un nome di campo che finisce in un ORDER BY SQL o
+// in una chiave bson è un input dell'utente dentro una query: senza questo controllo
+// `?sort=id;DROP TABLE x` veniva interpolato così com'era, e in Mongo una chiave `$...` è un
+// operatore. Lo si verifica qui, all'ingresso, e di nuovo nei builder (SortRequest.Validate), perché
+// una SortRequest si può anche costruire a mano.
+func ValidSortField(name string) bool {
+	if name == "" {
+		return false
+	}
+	for _, seg := range strings.Split(name, ".") {
+		if seg == "" {
+			return false
+		}
+		for i, r := range seg {
+			switch {
+			case r == '_', r >= 'a' && r <= 'z', r >= 'A' && r <= 'Z':
+			case r >= '0' && r <= '9' && i > 0:
+			default:
+				return false
+			}
+		}
+	}
+	return true
+}
+
+// Validate verifica che ogni campo sia un nome ordinabile (vedi ValidSortField). I builder di
+// go-core-sql e go-core-mongo lo chiamano prima di usare la richiesta.
+func (s SortRequest) Validate() error {
+	for _, f := range s {
+		if !ValidSortField(f.Field) {
+			return fmt.Errorf("sort: invalid field name %q", f.Field)
+		}
+	}
+	return nil
 }

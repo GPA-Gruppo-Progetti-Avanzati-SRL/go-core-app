@@ -155,3 +155,23 @@ func TestPagingInvalidStates(t *testing.T) {
 		t.Fatalf("IncCurrentPage da pagina invalida = %d, want 1", q.CurrentPage)
 	}
 }
+
+// TestParseSort_RifiutaCampiNonIdentificatori: il nome del campo finisce in un ORDER BY SQL o in
+// una chiave bson, quindi deve essere un identificatore.
+func TestParseSort_RifiutaCampiNonIdentificatori(t *testing.T) {
+	for _, ok := range []string{"name", "created_at:desc", "address.city:asc", "_id", "a1"} {
+		if _, err := ParseSort(ok); err != nil {
+			t.Errorf("ParseSort(%q) = %v, atteso ok", ok, err)
+		}
+	}
+	for _, bad := range []string{
+		"id;DROP TABLE x", "name desc", "(select 1)", "$where", "a..b", ".a", "1a", "na-me", "id--", `"id"`,
+	} {
+		if _, err := ParseSort(bad); err == nil {
+			t.Errorf("ParseSort(%q): atteso errore", bad)
+		}
+	}
+	if err := (SortRequest{{Field: "id; drop"}}).Validate(); err == nil {
+		t.Error("Validate su una SortRequest costruita a mano: atteso errore")
+	}
+}
