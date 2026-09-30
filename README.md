@@ -26,10 +26,10 @@ dominio. I simboli **non hanno cambiato nome**, solo qualificatore (`core.Proper
 
 | Import (`go-core-app/...`) | Package | Contenuto |
 |---|---|---|
-| *(radice)* | `core` | `Boot`/`App`, `Run`/`Start`, `WithTracing`/`WithServerMetrics`, `ReadConfig`/`Config`, `Mode`/`IsMode`, registry fx (`Provide*`, `Supply`, `Invoke`, `Populate`, `Module`, `ModuleClosed`, `Private`, `ProvideStruct`, `In`/`Out`), identità (`AppName`, `Logo`, `BuildVersion`, `SHA`, `BuildDate`), **errori** (`Error`, `TechnicalError`/`BusinessError`/`NotFoundError`, `AmbitErrors`, `Field`/`F`, `Ambit`), **validazione** (`ValidateStruct`, `IValidate`, `Validator`, `Translator`, `ErrValidation`), `FormatBytes`, `DateFormat`/`DateTimeFormat`/`DateTimeZoneFormat` |
+| *(radice)* | `core` | `Boot`/`App`, `Run`/`Start`, `WithTracing`/`WithServerMetrics`, `ReadConfig`/`Config`, `Mode`/`IsMode`, registry fx (`Provide*`, `Supply`, `Invoke`, `Populate`, `Module`, `ModuleClosed`, `Private`, `ProvideStruct`, `In`/`Out`), identità (`AppName`, `Logo`, `BuildVersion`, `SHA`, `BuildDate`), `WaitContext`, **errori** (`Error`, `TechnicalError`/`BusinessError`/`NotFoundError`, `AmbitErrors`, `Field`/`F`, `Ambit`), **validazione** (`ValidateStruct`, `IValidate`, `Validator`, `Translator`, `ErrValidation`), `FormatBytes`, `DateFormat`/`DateTimeFormat`/`DateTimeZoneFormat` |
 | `properties` | `properties` | `Properties`, `BindProps`, `Inherit`, `IsZeroStruct`, i tag `PropTag`/`DefaultTag`/`ValidateTag` |
-| `observability` | `observability` | server ops (`NewServerMetrics`, `MetricsConfig`, `MetricsSettings`), `NewTracer`/`Tracer`, `MetricLogHook`, `SlogHandler`, `ProfilingHandler`, `HealthHandler`, GOMEMLIMIT dal cgroup |
-| `httpx` | `httpx` | `GenerateHttpClientWithInstrumentation`, `AddEndpointNameMetrics`, `DefaultHttpClientTimeout`, `ServeOnLifecycle`, `WaitContext` |
+| `observability` | `observability` | server ops (`NewServerMetrics`, `MetricsConfig`, `MetricsSettings`, `DefaultMetricsHost`/`DefaultMetricsPort`/`DefaultMetricsReadHeaderTimeout`), `NewTracer`/`Tracer`, `MetricLogHook`/`SharedMetricLogHook`, `SlogHandler`, `ProfilingHandler`, `HealthHandler`, GOMEMLIMIT dal cgroup |
+| `httpx` | `httpx` | `GenerateHttpClientWithInstrumentation`, `AddEndpointNameMetrics`, `DefaultHttpClientTimeout`, `ServeOnLifecycle` |
 | `cli` | `cli` | `Execute`, `Exec`, `ITaskRunner`, `Task`, `TaskConfig`, `FlagDefinition` — l'unico che porta cobra |
 | `utils` | `utils` | `Encrypt`/`Decrypt`, i date helper e `ErrDateParse`, `ConcurrentTwo`/`ConcurrentN`/`ErrConcurrentPanic`, `TaggedFields`, `GetHostname`/`UnknownHostname` |
 | `page` | `page` | paginazione e sort (invariato) |
@@ -37,22 +37,22 @@ dominio. I simboli **non hanno cambiato nome**, solo qualificatore (`core.Proper
 **Grafo degli import.** La radice importa `properties` e `observability`; loro non importano la
 radice. `utils`, `page` e `cli` importano la radice (ritornano un `*core.Error`), e la radice non
 importa loro. I due package che la radice importa e che hanno bisogno di qualcosa che vive qui lo
-ricevono da una sorgente installata dall'`init()` di `core.go`: `observability` l'identità dell'app
+ricevono da `internal/hooks`, che l'`init()` di `core.go` riempie (internal: un'app non può sostituirli): `observability` l'identità dell'app
 (`service.name`/`service.version`), `properties` il `Validator` — così una `RegisterValidation`
 fatta dall'app su `core.Validator` vale anche per i tag `validate:` dei campi `prop:`. I `-X`
 ldflags restano su `go-core-app.BuildVersion`/`SHA`/`BuildDate`.
 
-**Migrazione.** `scripts/migrate-split.sh <dir>` riscrive i qualificatori di tutti i `.go` sotto
-`<dir>` secondo la tabella qui sopra, aggiunge gli import dei subpackage usati e passa goimports.
-Riconosce l'alias con cui il file importa la radice (`core`, `coreapp`, ...). Poi `go build ./...`:
-una variabile locale che si chiama come un package nuovo (`properties`, `utils`) è un errore di
-compilazione da sistemare a mano.
+**Migrazione.** `cmd/migrate-split` riscrive un'app secondo la tabella qui sopra: lavora sull'AST,
+quindi tocca solo i riferimenti qualificati dall'import di go-core-app (con qualunque alias) e non
+commenti, stringhe, campi omonimi o file generati. Aggiunge gli import dei subpackage, toglie quello
+della radice se non serve più e formatta il file. Se un nome locale coincide con un package nuovo
+(`properties`, `utils`) l'import prende un alias (`coreproperties`, `coreutils`); un dot-import di
+go-core-app viene elencato e lasciato a mano (uscita 1).
 
 ```bash
-../go-core/go-core-app/scripts/migrate-split.sh .   # dalla root dell'app
+go run github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/cmd/migrate-split@latest .   # dalla root dell'app
 go build ./...
 ```
-
 ---
 
 ## Boot dell'app
@@ -166,7 +166,7 @@ dopo aver corretto la prima.
 
 ## Error handling
 
-Tutte le funzioni pubbliche ritornano `(*T, *core.Error)`. L'`ApplicationError` porta
+Tutte le funzioni pubbliche ritornano `(*T, *core.Error)`. Il `core.Error` porta
 `StatusCode`, `Ambit`, `Code`, `Message` e una **causa non esportata**.
 
 Il catalogo dei codici emessi da questa libreria è in **[ERRORI.md](ERRORI.md)**. `core.Ambit`
@@ -221,14 +221,14 @@ fra `WithMessage` e `WithCause` è indifferente.
 > `XxxErrorWithCodeAndMessage(c, m)` → `XxxError().WithCode(c).WithMessage(m)`; dove
 > `m == e.Error()` le due si fondono in `.WithCause(e)`.
 
-**`Unwrap()` non ritorna mai nil.** Senza di essa la catena si interromperebbe sull'`ApplicationError`:
+**`Unwrap()` non ritorna mai nil.** Senza di essa la catena si interromperebbe sul `core.Error`:
 `errors.Is`/`errors.As` compilerebbero comunque, ma il ramo che ne dipende non verrebbe mai preso —
 un bug che non si manifesta come errore. Se non è stata allegata una causa reale, `Unwrap`
 **sintetizza** una foglia dai `Code`/`Message` correnti.
 
 Il campo `cause` è **non esportato di proposito**: `encoding/json` e il codec bson ignorano i campi
 non esportati, quindi il body della risposta HTTP e il documento persistito restano identici.
-`Error()` ritorna il solo `Message`; `ApplicationError.Log` emette la causa reale come campo
+`Error()` ritorna il `Message` (o il `Code`, se il messaggio è vuoto); `core.Error.Log` emette la causa reale come campo
 strutturato `cause`.
 
 ```go
@@ -238,7 +238,7 @@ if appErr != nil {
 }
 ```
 
-Nelle API `coreapi.ManageBusinessError()` converte l'`ApplicationError` in una error response Huma.
+Nelle API `coreapi.ManageBusinessError()` converte il `core.Error` in una error response Huma.
 
 ---
 
@@ -426,7 +426,7 @@ if appErr := core.ValidateStruct(input); appErr != nil {
 }
 ```
 
-Ritorna un `ApplicationError` con codice `ERR_VALIDATION` che **conserva la causa**: la
+Ritorna un `core.Error` con codice `ERR_VALIDATION` che **conserva la causa**: la
 `validator.ValidationErrors` originale è recuperabile con `errors.As`, senza parsare il messaggio.
 La validazione della config all'avvio passa da qui; le regole che i tag non sanno esprimere
 passano invece da `IValidate` (vedi "Configurazione").
@@ -504,7 +504,7 @@ cli.Execute[mioTask]()   // costruisce il comando cobra, flag auto-derivate, ese
 - Il ciclo di vita del server è **`httpx.ServeOnLifecycle(lc, sh, srv, name)`**, lo stesso usato
   da `go-core-api`: listen in `OnStart` (una porta occupata fa fallire l'avvio), `Shutdown` col
   context dell'hook, e un server che muore a regime **fa uscire il processo** (codice 1) invece di
-  lasciarlo vivo senza servire nulla. `httpx.WaitContext(ctx, &wg)` è l'attesa limitata di un
+  lasciarlo vivo senza servire nulla. `core.WaitContext(ctx, &wg)` è l'attesa limitata di un
   `OnStop` (true = drenato, false = deadline scaduta).
 - `observability.NewTracer` (via `core.WithTracing`) configura l'export OTLP. Metriche e tracce portano
   `service.name` = `AppName` e `service.version` = `BuildVersion` (`OTEL_SERVICE_NAME` e

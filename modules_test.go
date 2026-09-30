@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -731,5 +732,23 @@ func TestPrivate_PanicRipristinaLoScope(t *testing.T) {
 	}()
 	if current != nil || inPrivate {
 		t.Fatalf("stato del registry non ripristinato: current=%v inPrivate=%v", current, inPrivate)
+	}
+}
+
+func TestWaitContext(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+	go func() { time.Sleep(10 * time.Millisecond); wg.Done() }()
+	if !WaitContext(context.Background(), &wg) {
+		t.Fatal("wg svuotato: atteso true")
+	}
+
+	var stuck sync.WaitGroup
+	stuck.Add(1)
+	defer stuck.Done()
+	ctx, cancel := context.WithTimeout(context.Background(), 20*time.Millisecond)
+	defer cancel()
+	if WaitContext(ctx, &stuck) {
+		t.Fatal("wg appeso: atteso false alla scadenza del context")
 	}
 }

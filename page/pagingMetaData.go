@@ -1,3 +1,5 @@
+// Package page è la paginazione (Paging, InitPaging, la policy app-wide di Configure/AppConfig)
+// e il parsing del sort (ParseSort).
 package page
 
 import (

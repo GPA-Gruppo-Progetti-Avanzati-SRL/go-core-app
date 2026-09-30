@@ -1,3 +1,12 @@
+// Package properties è la configurazione applicativa a chiavi libere (Properties, con getter
+// tipizzati e chiavi case-insensitive), il suo binding sui campi `prop:` di una struct (BindProps,
+// con `default:` e `validate:` per campo) e l'eredità fra due livelli di configurazione omologhi
+// (Inherit, IsZeroStruct).
+//
+// I tag `validate:` dei campi `prop:` usano core.Validator quando il package core è importato —
+// cioè in ogni app — così valgono anche le RegisterValidation dell'app. Chi importa properties da
+// solo (un test di un subpackage, un tool) ottiene un validator.New() nudo: stessi vincoli, ma
+// senza nomi di campo `mapstructure`, traduzioni italiane e validazioni custom.
 package properties
 
 import (
@@ -8,6 +17,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/internal/hooks"
 	"github.com/go-playground/validator/v10"
 	"github.com/go-viper/mapstructure/v2"
 	"github.com/rs/zerolog/log"
@@ -189,7 +199,7 @@ func BindProps(target any, props Properties) error {
 		if !ok || rule == "" {
 			continue
 		}
-		if err := validatorSource().Var(elem.FieldByIndex(pf.field.Index).Interface(), rule); err != nil {
+		if err := fieldValidator().Var(elem.FieldByIndex(pf.field.Index).Interface(), rule); err != nil {
 			return fmt.Errorf("property %q (campo %s): %w", pf.key, pf.field.Name, err)
 		}
 	}
@@ -214,16 +224,15 @@ func warnUnclaimed(t reflect.Type, props Properties, claimed map[string]bool) {
 		Msg("properties non mappate su alcun campo `prop:` (typo in config?)")
 }
 
-// validatorSource dà il validator dei tag `validate:` dei campi `prop:`. Lo installa il package core
-// nel proprio init (core.Validator), perché questo package non può importarlo — core importa
-// properties. Così una RegisterValidation fatta dall'app su core.Validator vale anche qui. Il default
-// serve a chi usa properties senza core.
-var validatorSource = sync.OnceValue(func() *validator.Validate { return validator.New() })
+// defaultValidator serve a chi usa properties senza core (un test di subpackage, un tool): un
+// validator.New() nudo, quindi senza i nomi di campo `mapstructure`, senza traduzioni e senza le
+// RegisterValidation dell'app. Con core importato — cioè in ogni app — si usa core.Validator,
+// installato in hooks.ValidatorSource dall'init di core.
+var defaultValidator = sync.OnceValue(func() *validator.Validate { return validator.New() })
 
-// SetValidator installa la sorgente del validator. È riservata a go-core-app: la chiama l'init del
-// package core.
-func SetValidator(source func() *validator.Validate) {
-	if source != nil {
-		validatorSource = source
+func fieldValidator() *validator.Validate {
+	if hooks.ValidatorSource != nil {
+		return hooks.ValidatorSource()
 	}
+	return defaultValidator()
 }

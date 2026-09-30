@@ -1,3 +1,6 @@
+// Package utils raccoglie le utility senza un dominio proprio: cifratura del token (Encrypt,
+// Decrypt), conversioni di date, concorrenza limitata (ConcurrentTwo, ConcurrentN), lo scheletro
+// dei filter builder a tag (TaggedFields) e l'hostname del processo.
 package utils
 
 import (

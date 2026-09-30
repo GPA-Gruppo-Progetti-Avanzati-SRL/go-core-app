@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/internal/hooks"
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/observability"
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common/util"
 	"github.com/rs/zerolog"
@@ -27,8 +28,8 @@ type Config struct {
 		EnableJSON bool
 		Metric     bool
 	}
-	Metrics   observability.MetricsConfig `yaml:"metrics" mapstructure:"metrics" json:"metrics"`
-	AppConfig any                         `yaml:"config" mapstructure:"config" json:"config"`
+	Metrics   hooks.MetricsConfig `yaml:"metrics" mapstructure:"metrics" json:"metrics"`
+	AppConfig any                 `yaml:"config" mapstructure:"config" json:"config"`
 }
 
 func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error {
@@ -86,7 +87,7 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 
 	// La sezione `metrics:` è consumata dalla libreria stessa (observability.NewServerMetrics), esattamente
 	// come `log:` qui sotto: si deposita ora, mentre la struct è viva, perché ReadConfig la scarta.
-	observability.SetMetricsConfig(config.Metrics)
+	hooks.Metrics = config.Metrics
 
 	if !config.Log.Ignore {
 		lvl, err := parseLogLevel(config.Log.Level)

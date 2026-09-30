@@ -2,7 +2,7 @@
 
 Tutti gli errori pubblici sono `*core.Error` (`errors.go`): `StatusCode`, `Ambit`,
 `Code`, `Message` e una causa non esportata (`WithCause` → `errors.Is`/`errors.As`). `Error()`
-ritorna il solo `Message`; `Log()` emette la causa reale nel campo strutturato `cause`.
+ritorna il `Message` (o il `Code`, se il messaggio è vuoto); `Log()` emette la causa reale nel campo strutturato `cause`.
 
 > **`Ambit` dice da quale libreria viene l'errore.** I costruttori base (`TechnicalError()`,
 > `BusinessError()`, `NotFoundError()`) riempiono `Ambit` con `AppName`, cioè con l'app che
@@ -63,16 +63,10 @@ Ambit: `go-core-app` (costante `core.Ambit`).
   cioè buttava via il codice appena calcolato. Ora rimbalzano l'errore interno così com'è —
   stesso tipo, codice conservato.
 
-## Errori sentinella (non `ApplicationError`)
+## Errori sentinella del lock
 
-| Simbolo | Package | Significato |
-|---|---|---|
-| `lock.ErrNotAcquired` | `go-core-app/lock` | lock distribuito già tenuto da un'altra replica: contesa, **non** un guasto |
-| `lock.ErrLockLost` | `go-core-app/lock` | lease scaduto o perso durante il rinnovo: il lavoro in corso non è più protetto |
-
-Le implementazioni (`go-core-redis/locker`, `go-core-mongo/locker`, `go-core-sql/locker`)
-ritornano questi due e nient'altro di specifico; gli errori di backend risalgono avvolti, da
-confrontare con `errors.Is`.
+Non sono più qui: `ErrNotAcquired` ed `ErrLockLost` sono di **go-core-locker** (`corelock`), col
+resto del lock distribuito — vedi `go-core-locker/ERRORI.md`.
 
 ## Errori senza codice (censiti, di proposito non codificati)
 

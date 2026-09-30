@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"slices"
 	"strings"
+	"sync"
 
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/observability"
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/properties"
@@ -644,6 +645,28 @@ func checkableDep(ft reflect.Type, group string, optional bool) bool {
 	case reflect.Pointer, reflect.Interface, reflect.Map, reflect.Slice, reflect.Chan, reflect.Func:
 		return true
 	default:
+		return false
+	}
+}
+
+// WaitContext attende wg, ma non oltre ctx: ritorna true se wg si è svuotato, false se ctx è
+// scaduto prima. È l'attesa di un OnStop — le goroutine in volo devono poter finire, ma una
+// appesa non deve tenere in piedi il processo oltre fx.StopTimeout. Cosa fare delle residue lo
+// decide il chiamante (di solito: loggarle e proseguire).
+//
+// Se ctx scade, la goroutine interna che aspetta wg resta viva finché wg non si svuota: è il
+// prezzo di non poter interrompere sync.WaitGroup.Wait, e in un processo che sta terminando non
+// ha conseguenze.
+func WaitContext(ctx context.Context, wg *sync.WaitGroup) bool {
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return true
+	case <-ctx.Done():
 		return false
 	}
 }

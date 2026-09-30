@@ -1,3 +1,6 @@
+// Package httpx raccoglie ciò che serve attorno a net/http nelle librerie go-core: il ciclo di
+// vita fx di un *http.Server (ServeOnLifecycle) e il client strumentato OTel con timeout di
+// default (GenerateHttpClientWithInstrumentation).
 package httpx
 
 import (
@@ -6,7 +9,6 @@ import (
 	"fmt"
 	"net"
 	"net/http"
-	"sync"
 
 	"github.com/rs/zerolog/log"
 	"go.uber.org/fx"
@@ -28,9 +30,15 @@ import (
 //
 // name identifica il server nei log ("api", "metrics").
 func ServeOnLifecycle(lc fx.Lifecycle, sh fx.Shutdowner, srv *http.Server, name string) {
+	serveOnLifecycle(lc, sh, srv, name, func() (net.Listener, error) { return net.Listen("tcp", srv.Addr) })
+}
+
+// serveOnLifecycle è ServeOnLifecycle con l'apertura del listener iniettata: è ciò che permette di
+// provare il ramo "il server muore a regime", che richiede di chiudere il listener da sotto.
+func serveOnLifecycle(lc fx.Lifecycle, sh fx.Shutdowner, srv *http.Server, name string, listen func() (net.Listener, error)) {
 	lc.Append(fx.Hook{
 		OnStart: func(context.Context) error {
-			ln, err := net.Listen("tcp", srv.Addr)
+			ln, err := listen()
 			if err != nil {
 				return fmt.Errorf("%s: listen on %s: %w", name, srv.Addr, err)
 			}
@@ -50,26 +58,4 @@ func ServeOnLifecycle(lc fx.Lifecycle, sh fx.Shutdowner, srv *http.Server, name 
 			return srv.Shutdown(ctx)
 		},
 	})
-}
-
-// WaitContext attende wg, ma non oltre ctx: ritorna true se wg si è svuotato, false se ctx è
-// scaduto prima. È l'attesa di un OnStop — le goroutine in volo devono poter finire, ma una
-// appesa non deve tenere in piedi il processo oltre fx.StopTimeout. Cosa fare delle residue lo
-// decide il chiamante (di solito: loggarle e proseguire).
-//
-// Se ctx scade, la goroutine interna che aspetta wg resta viva finché wg non si svuota: è il
-// prezzo di non poter interrompere sync.WaitGroup.Wait, e in un processo che sta terminando non
-// ha conseguenze.
-func WaitContext(ctx context.Context, wg *sync.WaitGroup) bool {
-	done := make(chan struct{})
-	go func() {
-		wg.Wait()
-		close(done)
-	}()
-	select {
-	case <-done:
-		return true
-	case <-ctx.Done():
-		return false
-	}
 }

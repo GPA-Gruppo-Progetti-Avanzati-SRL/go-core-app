@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/internal/hooks"
 	semconv "go.opentelemetry.io/otel/semconv/v1.43.0"
 	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
@@ -19,14 +20,14 @@ type nopShutdowner struct{}
 func (nopShutdowner) Shutdown(...fx.ShutdownOption) error { return nil }
 
 // startMetrics avvia il server ops con la sezione `metrics:` data e ritorna il suo base URL.
-// metricsConfig è la var di package che ReadConfig popola: qui la si imposta a mano, che è
+// hooks.Metrics è la var di package che ReadConfig popola: qui la si imposta a mano, che è
 // esattamente ciò che fa la lettura della config.
 func startMetrics(t *testing.T, cfg MetricsConfig) string {
 	t.Helper()
 
-	prev := metricsConfig
-	metricsConfig = cfg
-	t.Cleanup(func() { metricsConfig = prev })
+	prev := hooks.Metrics
+	hooks.Metrics = cfg
+	t.Cleanup(func() { hooks.Metrics = prev })
 
 	lc := fxtest.NewLifecycle(t)
 	if err := NewServerMetrics(lc, nopShutdowner{}); err != nil {
@@ -35,7 +36,7 @@ func startMetrics(t *testing.T, cfg MetricsConfig) string {
 	lc.RequireStart()
 	t.Cleanup(lc.RequireStop)
 
-	eff := metricsConfig.withDefaults()
+	eff := withDefaults(hooks.Metrics)
 	return fmt.Sprintf("http://127.0.0.1:%d", eff.Port)
 }
 
@@ -102,7 +103,7 @@ func TestServerMetrics_ScrapeReggeChiamateRipetute(t *testing.T) {
 // quelli dichiarati a viper in ReadConfig. Pprof non è fra questi: false è una scelta, non un
 // "non valorizzato".
 func TestMetricsConfig_Defaults(t *testing.T) {
-	got := MetricsConfig{}.withDefaults()
+	got := withDefaults(MetricsConfig{})
 
 	if got.Host != DefaultMetricsHost {
 		t.Errorf("Host = %q, atteso %q (tutte le interfacce: Prometheus scrapa l'IP del pod)", got.Host, DefaultMetricsHost)
@@ -117,7 +118,7 @@ func TestMetricsConfig_Defaults(t *testing.T) {
 		t.Error("Pprof deve restare false per default: l'esposizione si chiede, non si eredita")
 	}
 
-	explicit := MetricsConfig{Host: "127.0.0.1", Port: 9999, ReadHeaderTimeout: time.Second}.withDefaults()
+	explicit := withDefaults(MetricsConfig{Host: "127.0.0.1", Port: 9999, ReadHeaderTimeout: time.Second})
 	if explicit.Host != "127.0.0.1" || explicit.Port != 9999 || explicit.ReadHeaderTimeout != time.Second {
 		t.Errorf("i valori espliciti non devono essere sovrascritti: %+v", explicit)
 	}
@@ -134,9 +135,9 @@ func TestServerMetrics_PortaOccupataFallisceOnStart(t *testing.T) {
 	defer busy.Close()
 	port := busy.Addr().(*net.TCPAddr).Port
 
-	prev := metricsConfig
-	metricsConfig = MetricsConfig{Host: "127.0.0.1", Port: port}
-	defer func() { metricsConfig = prev }()
+	prev := hooks.Metrics
+	hooks.Metrics = MetricsConfig{Host: "127.0.0.1", Port: port}
+	defer func() { hooks.Metrics = prev }()
 
 	lc := fxtest.NewLifecycle(t)
 	if err := NewServerMetrics(lc, nopShutdowner{}); err != nil {
@@ -163,11 +164,11 @@ func freePort(t *testing.T) int {
 // TestServiceAttributes_LeggonoLaSorgente: service.name e service.version arrivano dalla sorgente
 // che il package core installa, letta a ogni uso.
 func TestServiceAttributes_LeggonoLaSorgente(t *testing.T) {
-	prev := identitySource
-	t.Cleanup(func() { identitySource = prev })
+	prev := hooks.IdentitySource
+	t.Cleanup(func() { hooks.IdentitySource = prev })
 
 	name := "svc-a"
-	SetIdentity(func() Identity { return Identity{Name: name, Version: "1.2.3"} })
+	hooks.IdentitySource = func() hooks.Identity { return hooks.Identity{Name: name, Version: "1.2.3"} }
 	name = "svc-b" // assegnazione successiva: deve vedersi
 	got := map[string]string{}
 	for _, kv := range serviceAttributes() {

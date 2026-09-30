@@ -6,8 +6,7 @@
 package core
 
 import (
-	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/observability"
-	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/properties"
+	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/internal/hooks"
 	"github.com/go-playground/validator/v10"
 )
 
@@ -26,9 +25,10 @@ var (
 // Due package importati dalla radice hanno bisogno di qualcosa che vive qui, e non possono importare
 // core senza un ciclo: observability l'identità (service.name e service.version di metriche e tracce),
 // properties il Validator (i tag validate: dei campi prop:, con le RegisterValidation fatte
-// dall'app). Si installano sorgenti lette a ogni uso, non copie, perché molte app assegnano ancora
-// core.AppName a mano dopo l'init.
+// dall'app). Glieli si passa da internal/hooks — internal perché un'app non li possa sostituire —
+// come sorgenti lette a ogni uso, non copie: molte app assegnano ancora core.AppName a mano dopo
+// l'init.
 func init() {
-	observability.SetIdentity(func() observability.Identity { return observability.Identity{Name: AppName, Version: BuildVersion} })
-	properties.SetValidator(func() *validator.Validate { return Validator })
+	hooks.IdentitySource = func() hooks.Identity { return hooks.Identity{Name: AppName, Version: BuildVersion} }
+	hooks.ValidatorSource = func() *validator.Validate { return Validator }
 }

@@ -52,7 +52,12 @@ type codeError struct {
 	message string
 }
 
-func (c *codeError) Error() string { return c.code + ": " + c.message }
+func (c *codeError) Error() string {
+	if c.message == "" {
+		return c.code
+	}
+	return c.code + ": " + c.message
+}
 
 type Error struct {
 	StatusCode int    `json:"-" bson:"statusCode"`

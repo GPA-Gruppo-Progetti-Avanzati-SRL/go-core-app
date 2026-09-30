@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/httpx"
+	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app/internal/hooks"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
@@ -25,49 +26,15 @@ import (
 )
 
 // MetricsConfig configura il server ops di NewServerMetrics (/metrics, /health e — solo se
-// richiesto — /debug/pprof/*). La sezione `metrics:` è facoltativa: i default di viperDefaults
-// riproducono esattamente il comportamento storico (0.0.0.0:2112, pprof spento), quindi una
-// config che non la nomina non cambia di una virgola.
-type MetricsConfig struct {
-	Host              string        `yaml:"host" mapstructure:"host" json:"host"`
-	Port              int           `yaml:"port" mapstructure:"port" json:"port"`
-	Pprof             bool          `yaml:"pprof" mapstructure:"pprof" json:"pprof"`
-	ReadHeaderTimeout time.Duration `yaml:"read-header-timeout" mapstructure:"read-header-timeout" json:"read-header-timeout"`
-}
+// richiesto — /debug/pprof/*). La sezione `metrics:` è facoltativa: i default riproducono il
+// comportamento storico (0.0.0.0:2112, pprof spento). È definita in internal/hooks perché la
+// deposita core.ReadConfig, che questo package non può importare.
+type MetricsConfig = hooks.MetricsConfig
 
-// metricsConfig è la sezione `metrics:` letta da core.ReadConfig e depositata con SetMetricsConfig.
-// Sta in una var di package per la stessa ragione per cui ci stanno Mode, AppName e BuildVersion:
-// NewServerMetrics è un invoke fx senza parametri di config, e passargliela cambierebbe la firma di
-// core.WithServerMetrics — cioè costringerebbe ogni app a scrivere un argomento per una sezione che
-// quasi nessuna valorizza.
-var metricsConfig MetricsConfig
-
-// MetricsSettings ritorna la configurazione del server ops effettivamente in uso (default
-// compresi). Esportata perché è l'unico modo, per un'app o un test, di sapere su quale indirizzo
-// il server è stato messo in ascolto senza reimplementare i default.
-func MetricsSettings() MetricsConfig { return metricsConfig }
-
-// SetMetricsConfig deposita la sezione `metrics:`. È riservata a go-core-app: la chiama
-// core.ReadConfig, e un'app non ha motivo di chiamarla.
-func SetMetricsConfig(c MetricsConfig) { metricsConfig = c }
-
-// Identity è l'identità del processo nelle risorse OTel di metriche e tracce.
-type Identity struct {
-	Name    string // service.name: core.AppName
-	Version string // service.version: core.BuildVersion
-}
-
-// identitySource la installa il package core nel proprio init (legge AppName e BuildVersion),
-// perché questo package non può importarlo — core importa observability. È una funzione e non un valore per
-// la stessa ragione di core.SetDefaultAmbit: le app assegnano core.AppName dopo l'init.
-var identitySource = func() Identity { return Identity{} }
-
-// SetIdentity installa la sorgente dell'identità. È riservata a go-core-app (init del package core).
-func SetIdentity(source func() Identity) {
-	if source != nil {
-		identitySource = source
-	}
-}
+// MetricsSettings ritorna la configurazione del server ops effettivamente in uso, default
+// compresi: è l'unico modo, per un'app o un test, di sapere su quale indirizzo il server è stato
+// messo in ascolto senza reimplementare i default.
+func MetricsSettings() MetricsConfig { return withDefaults(hooks.Metrics) }
 
 // Default del server ops. Duplicano i viper.SetDefault di ReadConfig perché NewServerMetrics
 // dev'essere corretta anche quando ReadConfig non è passata (test, o un'app che legge la config
@@ -84,7 +51,7 @@ const (
 
 // withDefaults riempie i soli campi non valorizzati. Pprof è deliberatamente assente: false è il
 // default e non esiste un "non valorizzato" da distinguere — l'esposizione si chiede, non si eredita.
-func (c MetricsConfig) withDefaults() MetricsConfig {
+func withDefaults(c MetricsConfig) MetricsConfig {
 	if c.Host == "" {
 		c.Host = DefaultMetricsHost
 	}
@@ -111,7 +78,7 @@ var (
 // service.name ogni serie arriva come `unknown_service`. Letta a OnStart/invoke, cioè dopo che
 // Boot ha impostato AppName.
 func serviceAttributes() []attribute.KeyValue {
-	id := identitySource()
+	id := hooks.IdentitySource()
 	attrs := []attribute.KeyValue{semconv.ServiceVersion(id.Version)}
 	if id.Name != "" {
 		attrs = append(attrs, semconv.ServiceName(id.Name))
@@ -159,7 +126,7 @@ func NewServerMetrics(lc fx.Lifecycle, sh fx.Shutdowner) error {
 		return err
 	}
 
-	cfg := metricsConfig.withDefaults()
+	cfg := withDefaults(hooks.Metrics)
 
 	mux := http.NewServeMux()
 	mux.Handle("/metrics", promhttp.Handler())
