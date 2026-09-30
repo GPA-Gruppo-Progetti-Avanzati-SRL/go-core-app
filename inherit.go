@@ -28,7 +28,9 @@ import (
 //	                    e la completezza sono del livello che la scrive)
 //	bool                MAI: false è indistinguibile da "non scritto" — chi ha bisogno di ereditare
 //	                    un booleano usa *bool
-//	struct              ricorsione
+//	struct              ricorsione; una struct SENZA campi esportati (time.Time e simili) è invece un
+//	                    valore atomico, che eredita se è al suo zero value — ricorrervi dentro non
+//	                    troverebbe alcun campo da ereditare, e il campo resterebbe a zero in silenzio
 //
 // Un campo di un tipo non previsto fa PANICARE: è un errore di programmazione da correggere al primo
 // test, e il silenzio alternativo sarebbe un campo che non eredita senza che nulla lo segnali.
@@ -54,7 +56,9 @@ func Inherit[T any](dst, src *T) {
 // valori che coincidono col default" — una differenza che di solito vale un avviso al boot, e che
 // ri-elencando i campi a mano si perde appena se ne aggiunge uno.
 //
-// Nota: una mappa vuota ma non nil conta come non valorizzata (a differenza di reflect.Value.IsZero).
+// Nota: una mappa vuota ma non nil conta come non valorizzata (a differenza di reflect.Value.IsZero),
+// e un numero negativo anche — è ciò che Inherit sovrascriverebbe, quindi contarlo come "scritto"
+// faceva divergere le due funzioni proprio sul valore -1.
 func IsZeroStruct[T any](v T) bool {
 	rv := reflect.ValueOf(v)
 	if rv.Kind() != reflect.Struct {
@@ -103,6 +107,12 @@ func inheritValue(dst, src reflect.Value, owner string) {
 		case reflect.Bool:
 			// Nessuna eredità possibile: false è indistinguibile da "non scritto".
 		case reflect.Struct:
+			if isOpaqueStruct(dv.Type()) {
+				if dv.IsZero() {
+					dv.Set(sv)
+				}
+				continue
+			}
 			inheritValue(dv, sv, where)
 		default:
 			panic(fmt.Sprintf("core.Inherit: %s è di tipo %s, non gestito: aggiungere il caso in inheritValue (lasciarlo passare significherebbe un campo che non eredita, in silenzio)", where, dv.Kind()))
@@ -147,7 +157,7 @@ func isZeroValue(v reflect.Value, owner string) bool {
 				return false
 			}
 		case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
-			if fv.Int() != 0 {
+			if fv.Int() > 0 {
 				return false
 			}
 		case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64:
@@ -155,7 +165,7 @@ func isZeroValue(v reflect.Value, owner string) bool {
 				return false
 			}
 		case reflect.Float32, reflect.Float64:
-			if fv.Float() != 0 {
+			if fv.Float() > 0 {
 				return false
 			}
 		case reflect.Bool:
@@ -163,11 +173,28 @@ func isZeroValue(v reflect.Value, owner string) bool {
 				return false
 			}
 		case reflect.Struct:
+			if isOpaqueStruct(fv.Type()) {
+				if !fv.IsZero() {
+					return false
+				}
+				continue
+			}
 			if !isZeroValue(fv, where) {
 				return false
 			}
 		default:
 			panic(fmt.Sprintf("core.IsZeroStruct: %s è di tipo %s, non gestito", where, fv.Kind()))
+		}
+	}
+	return true
+}
+
+// isOpaqueStruct: una struct senza campi esportati non ha nulla da ereditare campo per campo, e si
+// tratta come un valore unico.
+func isOpaqueStruct(t reflect.Type) bool {
+	for i := range t.NumField() {
+		if t.Field(i).IsExported() {
+			return false
 		}
 	}
 	return true

@@ -1,7 +1,6 @@
 package page
 
 import (
-	"errors"
 	"fmt"
 	"math"
 
@@ -47,7 +46,12 @@ type Paging struct {
 // reads the passed Config and writes the returned struct — no shared state.
 // If pageSize is -1, the default value pagingConfig.DefaultPageSize is used.
 // If pageNumber is -1, the default value pagingConfig.DefaultPageNumber is used.
+// A nil pagingConfig means the application-wide policy (AppConfig): it used to be a nil
+// dereference.
 func InitPaging(pagingConfig *Config, pageSize, pageNumber int, totalItems int64) *Paging {
+	if pagingConfig == nil {
+		pagingConfig = AppConfig()
+	}
 	size := pageSize
 	if pageSize == -1 {
 		size = pagingConfig.DefaultPageSize
@@ -117,7 +121,9 @@ func (p *Paging) Paging() (int, *core.ApplicationError) {
 func (p *Paging) updatePagingMetaData() {
 
 	// If there are no items, TotalPages = 0. Otherwise, calculate TotalPages
-	if p.TotalCount == 0 {
+	// PageSize < 0 is an invalid state (Paging() rejects it): here it only must not produce a
+	// negative TotalPages from the division below.
+	if p.TotalCount <= 0 || p.PageSize < 0 {
 		p.setTotalPages(0)
 	} else {
 		p.setTotalPages(int(math.Ceil(float64(p.TotalCount) / float64(p.PageSize))))
@@ -192,22 +198,23 @@ func (p *Paging) SetCurrentPage(currentPage int) *core.ApplicationError {
 	return nil
 }
 
-// Increment CurrentPage
+// IncCurrentPage moves to the next page. From an invalid current page (< 1) it moves to the
+// first one: pages start at 1, and panicking inside a request handler brought down the request
+// for a value the library itself can correct.
 func (p *Paging) IncCurrentPage() {
-	if p.CurrentPage < 0 {
-		panic(errors.New("invalid current page"))
+	if p.CurrentPage < 1 {
+		p.CurrentPage = 1
+	} else {
+		p.CurrentPage++
 	}
-	p.CurrentPage++
 
 	p.updatePagingMetaData()
 }
 
-// Decrement CurrentPage
+// DecCurrentPage moves to the previous page, never below the first: it used to reach 0, which
+// SetCurrentPage and Paging() reject.
 func (p *Paging) DecCurrentPage() {
-	if p.CurrentPage < 0 {
-		panic(errors.New("invalid current page"))
-	}
-	p.CurrentPage--
+	p.CurrentPage = max(p.CurrentPage-1, 1)
 
 	p.updatePagingMetaData()
 }
@@ -223,14 +230,16 @@ func (p *Paging) setHasPrev(hasPrev bool) {
 }
 
 // Validator for PageSize.
+// -1 is a sentinel of InitPaging ("use the default") and is resolved there: on a built Paging it
+// is not a size, and letting it through gave a negative TotalPages and a negative offset.
 // Validates against the per-instance limit captured at InitPaging time; when no
 // per-instance limit is set (Config.MaxPageSize <= 0, or a Paging not built via
 // InitPaging) the immutable FallbackMaxPageSize applies, so the upper bound is
 // never unbounded. param == 0 ("all items") deliberately bypasses the cap.
 func (p *Paging) validatorPageSize(param int) *core.ApplicationError {
-	if param < -1 {
+	if param < 0 {
 		return core.BusinessError().WithAmbit(core.Ambit).WithCode(ErrPageSize).
-			WithMessage(fmt.Sprintf("invalid page size %d: must be >= -1", param))
+			WithMessage(fmt.Sprintf("invalid page size %d: must be >= 0", param))
 	}
 
 	max := p.maxPageSize

@@ -124,3 +124,34 @@ func TestJSONRoundTripLosesBound(t *testing.T) {
 		t.Fatal("expected ERR-PAGESIZE: rebuilt Paging (PageSize 300) must fall back to the 100 cap")
 	}
 }
+
+// TestPagingInvalidStates: -1 is an InitPaging sentinel, not a size; nil config falls back to
+// AppConfig; Inc/Dec never leave the valid range nor panic.
+func TestPagingInvalidStates(t *testing.T) {
+	p := InitPaging(nil, -1, -1, 25)
+	if p.PageSize != AppConfig().DefaultPageSize {
+		t.Fatalf("nil config: PageSize = %d", p.PageSize)
+	}
+	if err := p.SetPageSize(-1); err == nil || err.Code != ErrPageSize {
+		t.Fatalf("SetPageSize(-1) = %v, want %s", err, ErrPageSize)
+	}
+	raw := &Paging{PageSize: -1, TotalCount: 10, CurrentPage: 1}
+	raw.SetTotalItems(10)
+	if raw.TotalPages < 0 {
+		t.Fatalf("TotalPages negativo: %d", raw.TotalPages)
+	}
+	if _, err := raw.Paging(); err == nil {
+		t.Fatal("Paging() con PageSize -1: atteso errore")
+	}
+
+	p.CurrentPage = 1
+	p.DecCurrentPage()
+	if p.CurrentPage != 1 {
+		t.Fatalf("DecCurrentPage sotto 1: %d", p.CurrentPage)
+	}
+	q := &Paging{PageSize: 10, CurrentPage: -2}
+	q.IncCurrentPage()
+	if q.CurrentPage != 1 {
+		t.Fatalf("IncCurrentPage da pagina invalida = %d, want 1", q.CurrentPage)
+	}
+}

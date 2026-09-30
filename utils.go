@@ -5,18 +5,31 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rs/zerolog/log"
 )
 
-func GetHostname() string {
-	hostname, err := os.Hostname()
-	if err != nil {
-		log.Warn().Msgf("Could not get hostname: %s", err.Error())
+// UnknownHostname è ciò che GetHostname ritorna se il sistema operativo non dà un hostname.
+const UnknownHostname = "unknown"
+
+// GetHostname ritorna l'hostname del processo, letto una volta sola: non cambia durante la vita
+// del processo, e chi lo scrive su ogni riga persistita (task_logs, work_items) lo chiamava a ogni
+// scrittura — con un Warn per chiamata se falliva. Se os.Hostname fallisce o è vuoto ritorna
+// UnknownHostname invece della stringa vuota: un campo "chi l'ha fatto" vuoto è indistinguibile da
+// "non scritto", e prima go-core-batch aveva un secondo helper proprio per questa ragione, che
+// divergeva da questo in caso di errore.
+func GetHostname() string { return hostname() }
+
+var hostname = sync.OnceValue(func() string {
+	h, err := os.Hostname()
+	if err != nil || h == "" {
+		log.Warn().Err(err).Msgf("could not get hostname, using %q", UnknownHostname)
+		return UnknownHostname
 	}
-	return hostname
-}
+	return h
+})
 
 func GetTimestamp() string {
 	date := time.Now()
@@ -24,8 +37,11 @@ func GetTimestamp() string {
 	return stringDate
 }
 
-//MOTORE ^\\d{14}-[A-Z]{4}-[a-z0-9A-Z\\-]{30,50}$
-
+// ConvertStringToTimeDate interpreta una data "yyyy-mm-dd" nel fuso locale.
+//
+// Deprecated: usare StringToDate, che fa lo stesso lavoro con time.ParseInLocation. Questa
+// versione compone i campi con time.Date, che normalizza invece di rifiutare: "2026-13-40"
+// diventa il 9 febbraio 2027 senza errore.
 func ConvertStringToTimeDate(input string) (time.Time, error) {
 	// data stringa con formato "yyyy-mm-dd"
 	// Separiamo anno, mese e giorno dalla stringa

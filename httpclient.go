@@ -3,6 +3,7 @@ package core
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"go.opentelemetry.io/otel/attribute"
@@ -14,8 +15,22 @@ func AddEndpointNameMetrics(str string, ctx context.Context) context.Context {
 	return otelhttp.ContextWithLabeler(ctx, &labeler)
 }
 
-func GenerateHttpClientWithInstrumentation(serviceName string) *http.Client {
+// DefaultHttpClientTimeout è il timeout dei client di GenerateHttpClientWithInstrumentation. Un
+// http.Client a zero non ha timeout: un upstream che accetta la connessione e non risponde teneva
+// ferma la goroutine chiamante per sempre, e con lei la richiesta che la aspettava.
+const DefaultHttpClientTimeout = 30 * time.Second
+
+// GenerateHttpClientWithInstrumentation ritorna un client strumentato OTel con l'attributo
+// `service` e un timeout complessivo per richiesta. Il timeout è DefaultHttpClientTimeout, oppure
+// il primo valore > 0 passato: il parametro è variadico solo per non rompere le chiamate
+// esistenti. Un deadline più stretto per la singola chiamata si mette sul context della richiesta.
+func GenerateHttpClientWithInstrumentation(serviceName string, timeout ...time.Duration) *http.Client {
+	t := DefaultHttpClientTimeout
+	if len(timeout) > 0 && timeout[0] > 0 {
+		t = timeout[0]
+	}
 	return &http.Client{
+		Timeout: t,
 		Transport: serviceLabeler{
 			base: otelhttp.NewTransport(http.DefaultTransport),
 			attr: attribute.String("service", serviceName),
@@ -42,5 +57,7 @@ func (t serviceLabeler) RoundTrip(req *http.Request) (*http.Response, error) {
 		labeler.Add(parent.Get()...)
 	}
 	labeler.Add(t.attr)
-	return t.base.RoundTrip(req.Clone(otelhttp.ContextWithLabeler(req.Context(), labeler)))
+	// WithContext e non Clone: un RoundTripper può sostituire il context su una copia superficiale,
+	// e Clone copiava in profondità gli header a ogni richiesta senza che nessuno li modifichi.
+	return t.base.RoundTrip(req.WithContext(otelhttp.ContextWithLabeler(req.Context(), labeler)))
 }

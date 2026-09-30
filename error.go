@@ -24,7 +24,9 @@ func (e *ApplicationError) Log(op fmt.Stringer, fields ...Field) {
 	} else {
 		ev = log.Error().Err(e)
 	}
-	ev = ev.Str("op", op.String())
+	if op != nil {
+		ev = ev.Str("op", op.String())
+	}
 	// La causa non è nel testo di Error() (che resta il solo Message): senza questo
 	// campo l'errore originale non comparirebbe da nessuna parte nei log. Si stampa
 	// solo la causa reale — quella sintetica di Unwrap ripeterebbe Code e Message.
@@ -65,7 +67,13 @@ type ApplicationError struct {
 	cause error
 }
 
+// Error ritorna il Message. Se il Message è vuoto (TechnicalError().WithCode(c), senza causa né
+// messaggio) ritorna il Code: una stringa vuota in un log o in un %v non diceva nemmeno che
+// c'era stato un errore.
 func (m *ApplicationError) Error() string {
+	if m.Message == "" {
+		return m.Code
+	}
 	return m.Message
 }
 func (m *ApplicationError) GetStatus() int {

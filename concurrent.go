@@ -1,5 +1,14 @@
 package core
 
+import (
+	"fmt"
+	"runtime/debug"
+)
+
+// ErrConcurrentPanic è il codice dell'errore con cui ConcurrentTwo/ConcurrentN riportano un panic
+// del task.
+const ErrConcurrentPanic = "CONCURRENT-PANIC"
+
 type asyncResult[T any] struct {
 	val T
 	err *ApplicationError
@@ -7,8 +16,22 @@ type asyncResult[T any] struct {
 
 func runAsync[T any](fn func() (T, *ApplicationError)) <-chan asyncResult[T] {
 	ch := make(chan asyncResult[T], 1)
-	go func() { v, e := fn(); ch <- asyncResult[T]{v, e} }()
+	go func() { ch <- call(fn) }()
 	return ch
+}
+
+// call esegue fn trasformando un panic in un TechnicalError: in una goroutine lanciata dalla
+// libreria un panic non recuperato termina l'intero processo, non la sola chiamata.
+func call[T any](fn func() (T, *ApplicationError)) (r asyncResult[T]) {
+	defer func() {
+		if p := recover(); p != nil {
+			r = asyncResult[T]{err: TechnicalError().WithAmbit(Ambit).WithCode(ErrConcurrentPanic).
+				WithMessage(fmt.Sprintf("panic in concurrent task: %v", p)).
+				WithCause(fmt.Errorf("%v\n%s", p, debug.Stack()))}
+		}
+	}()
+	v, e := fn()
+	return asyncResult[T]{v, e}
 }
 
 // ConcurrentTwo runs two tasks in parallel. Both goroutines always complete — no goroutine leak.
@@ -25,8 +48,14 @@ func ConcurrentTwo[A, B any](
 }
 
 // ConcurrentN runs fn on each item with at most concurrency goroutines in parallel.
-// Results are returned in the same order as inputs; the first error encountered is returned.
+// Results are returned in the same order as inputs; the error of the first failing item (by
+// position) is returned. A concurrency <= 0 means no limit: a zero-capacity semaphore made the
+// first send block forever, and a negative one made make panic.
+// A panic in fn becomes a TechnicalError with code CONCURRENT-PANIC instead of killing the process.
 func ConcurrentN[T, R any](items []T, concurrency int, fn func(T) (R, *ApplicationError)) ([]R, *ApplicationError) {
+	if concurrency <= 0 || concurrency > len(items) {
+		concurrency = max(len(items), 1)
+	}
 	chs := make([]<-chan asyncResult[R], len(items))
 	sem := make(chan struct{}, concurrency)
 	for i, item := range items {
@@ -34,9 +63,8 @@ func ConcurrentN[T, R any](items []T, concurrency int, fn func(T) (R, *Applicati
 		ch := make(chan asyncResult[R], 1)
 		chs[i] = ch
 		go func() {
-			v, e := fn(item)
-			ch <- asyncResult[R]{v, e}
-			<-sem
+			defer func() { <-sem }()
+			ch <- call(func() (R, *ApplicationError) { return fn(item) })
 		}()
 	}
 	out := make([]R, len(items))

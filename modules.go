@@ -89,8 +89,11 @@ func Private(register func()) {
 	}
 	prev := inPrivate
 	inPrivate = true
+	// defer: un panic di register recuperato più in alto (un test, un wiring che lo intercetta)
+	// lascerebbe altrimenti lo stato globale dentro la closure, e le registrazioni successive
+	// finirebbero private senza che nessuno l'abbia chiesto.
+	defer func() { inPrivate = prev }()
 	register()
-	inPrivate = prev
 }
 
 // Supply registra un valore già istanziato. acceptedmodes opzionale come in Provide.
@@ -156,9 +159,12 @@ func buildModule(name string, register func(), closed bool) {
 	inPrivate = false
 	ms := &moduleScope{closed: closed}
 	current = ms
-	register()
-	current = prev
-	inPrivate = prevPrivate
+	// Ripristino in una closure differita per la stessa ragione di Private: senza, un panic
+	// recuperato lascerebbe current puntato su uno scope che nessuno costruirà più.
+	func() {
+		defer func() { current, inPrivate = prev, prevPrivate }()
+		register()
+	}()
 
 	// Nessuna registrazione (es. tutti i componenti gate-ati via dal mode corrente):
 	// niente fx.Module vuoto, per non sporcare grafo/log fx.
@@ -276,6 +282,12 @@ func Invoke(invoke any, acceptedmodes ...string) {
 // Populate registra un target per fx.Populate. acceptedmodes opzionale.
 func Populate(top any, acceptedmodes ...string) {
 	if IsMode(acceptedmodes...) {
+		// Dentro un Module è un invoke dello scope come gli altri: prima finiva a root senza
+		// dirlo, e non vedeva i tipi privati del modulo in cui era stato scritto.
+		if current != nil {
+			current.invokes = append(current.invokes, fx.Populate(top))
+			return
+		}
 		populatelist = append(populatelist, top)
 	}
 }

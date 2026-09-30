@@ -1,11 +1,18 @@
 package page
 
 // Page struct holding slices of mixed type items
+//
+// Deprecated: paginare in memoria con PagingItems non ha caller nelle librerie; la paginazione
+// si fa lato query con Paging.Paging() (offset) e il PageSize come limit.
 type Page[T any] struct {
 	Pages [][]T
 }
 
-// Paging
+// PagingItems returns the items of selectedPage (1-based), splitting responseList in pages of
+// pageSize items.
+//
+// Deprecated: see Page. It panics with pageSize <= 0 or a selectedPage out of range, and p.Pages
+// grows at every call.
 func (p *Page[T]) PagingItems(pageSize, selectedPage int, responseList []T, totalItems int) []T {
 	// One page, containing <pageSize> items
 	onePage := []T{}

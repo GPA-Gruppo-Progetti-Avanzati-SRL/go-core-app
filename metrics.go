@@ -1,7 +1,6 @@
 package core
 
 import (
-	"context"
 	"fmt"
 	"net"
 	"net/http"
@@ -11,6 +10,7 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/rs/zerolog/log"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
@@ -26,6 +26,10 @@ const (
 	DefaultMetricsHost              = "0.0.0.0"
 	DefaultMetricsPort              = 2112
 	DefaultMetricsReadHeaderTimeout = 5 * time.Second
+
+	// metricsIdleTimeout chiude le connessioni keep-alive inattive dello scraper. Non c'è un
+	// WriteTimeout, di proposito: /debug/pprof/profile?seconds=N scrive per N secondi.
+	metricsIdleTimeout = 2 * time.Minute
 )
 
 // withDefaults riempie i soli campi non valorizzati. Pprof è deliberatamente assente: false è il
@@ -53,6 +57,17 @@ var (
 	meterProviderErr  error
 )
 
+// serviceAttributes identifica il processo nelle risorse OTel di metriche e tracce: senza
+// service.name ogni serie arriva come `unknown_service`. Letta a OnStart/invoke, cioè dopo che
+// Boot ha impostato AppName.
+func serviceAttributes() []attribute.KeyValue {
+	attrs := []attribute.KeyValue{semconv.ServiceVersion(BuildVersion)}
+	if AppName != "" {
+		attrs = append(attrs, semconv.ServiceName(AppName))
+	}
+	return attrs
+}
+
 func initMeterProvider() error {
 	meterProviderOnce.Do(func() {
 		promExporter, err := prometheus.New(prometheus.WithoutScopeInfo())
@@ -62,10 +77,7 @@ func initMeterProvider() error {
 		}
 
 		res, err := resource.Merge(resource.Default(),
-			resource.NewWithAttributes(
-				semconv.SchemaURL,
-				semconv.ServiceVersion(BuildVersion),
-			))
+			resource.NewWithAttributes(semconv.SchemaURL, serviceAttributes()...))
 		if err != nil {
 			meterProviderErr = fmt.Errorf("metrics: resource merge: %w", err)
 			return
@@ -85,11 +97,12 @@ func initMeterProvider() error {
 // Ritorna error invece di panicare: è un invoke fx, quindi l'errore ferma l'avvio dell'app, che è
 // ciò che ci si aspetta da un misconfig. Il listener è aperto dentro OnStart e l'errore è
 // propagato: prima l'esito di ListenAndServe finiva in un blocco vuoto, quindi una porta occupata
-// era silenzio totale e il processo restava "sano" senza servire nulla.
+// era silenzio totale e il processo restava "sano" senza servire nulla. Il ciclo di vita è quello
+// di ServeOnLifecycle: un server che muore a regime fa uscire il processo.
 //
 // Il MeterProvider è inizializzato una volta sola per processo (vedi initMeterProvider): il
 // registry Prometheus è globale, quindi è l'unica semantica che non rompe /metrics.
-func NewServerMetrics(lc fx.Lifecycle) error {
+func NewServerMetrics(lc fx.Lifecycle, sh fx.Shutdowner) error {
 
 	if err := initMeterProvider(); err != nil {
 		return err
@@ -111,28 +124,10 @@ func NewServerMetrics(lc fx.Lifecycle) error {
 		Addr:              addr,
 		Handler:           mux,
 		ReadHeaderTimeout: cfg.ReadHeaderTimeout,
+		IdleTimeout:       metricsIdleTimeout,
 	}
 
-	lc.Append(fx.Hook{
-		OnStart: func(ctx context.Context) error {
-			// Listen prima di ritornare: un bind fallito deve far fallire l'avvio, non finire
-			// in una goroutine che nessuno osserva.
-			ln, lerr := net.Listen("tcp", addr)
-			if lerr != nil {
-				return fmt.Errorf("metrics: listen on %s: %w", addr, lerr)
-			}
-			log.Info().Str("addr", addr).Bool("pprof", cfg.Pprof).Msg("Starting metrics server")
-			go func() {
-				if serr := server.Serve(ln); serr != nil && serr != http.ErrServerClosed {
-					log.Error().Err(serr).Str("addr", addr).Msg("metrics server stopped")
-				}
-			}()
-			return nil
-		},
-		OnStop: func(ctx context.Context) error {
-			log.Info().Msg("Shutting down server metrics")
-			return server.Shutdown(ctx)
-		},
-	})
+	log.Info().Str("addr", addr).Bool("pprof", cfg.Pprof).Msg("metrics server configured")
+	ServeOnLifecycle(lc, sh, server, "metrics")
 	return nil
 }

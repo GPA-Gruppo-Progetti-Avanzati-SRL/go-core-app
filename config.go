@@ -92,18 +92,17 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 	viper.SetDefault("metrics.pprof", false)
 	viper.SetDefault("metrics.read-header-timeout", 5*time.Second)
 
-	verr := viper.ReadConfig(cfgFileReader)
+	// Senza un default, un file che non nomina `log.level` arriva qui con la stringa vuota, che
+	// zerolog.ParseLevel accetta come NoLevel: il livello globale finiva sopra Fatal, e ogni
+	// log.Fatal successivo — MODE non ammesso, IValidate di Boot, quelli dell'app — usciva con
+	// codice 1 senza stampare nulla.
+	viper.SetDefault("log.level", "info")
 
-	if verr != nil {
-		log.Fatal().Msgf("unable to read config, %v", verr)
+	if verr := viper.ReadConfig(cfgFileReader); verr != nil {
+		return fmt.Errorf("unable to read config: %w", verr)
 	}
-	err := viper.Unmarshal(&config)
-	if err != nil {
-		log.Fatal().Msgf("unable to decode into struct, %v", err)
-	}
-
-	if err != nil {
-		return err
+	if err := viper.Unmarshal(&config); err != nil {
+		return fmt.Errorf("unable to decode config: %w", err)
 	}
 
 	// La sezione `metrics:` è consumata dalla libreria stessa (NewServerMetrics), esattamente come
@@ -111,20 +110,17 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 	metricsConfig = config.Metrics
 
 	if !config.Log.Ignore {
-		i, err := strconv.Atoi(config.Log.Level)
+		lvl, err := parseLogLevel(config.Log.Level)
 		if err != nil {
-			lvl, err := zerolog.ParseLevel(strings.ToLower(config.Log.Level))
-			if err != nil {
-				return err
-			}
-			zerolog.SetGlobalLevel(lvl)
-		} else {
-			zerolog.SetGlobalLevel(zerolog.Level(i))
+			return err
 		}
+		zerolog.SetGlobalLevel(lvl)
 	}
 
+	// Il logger si ricostruisce da zero in entrambi i rami: agganciare l'hook a quello corrente lo
+	// accumulerebbe a ogni ReadConfig, e ogni evento verrebbe contato una volta per chiamata.
+	zerolog.TimeFieldFormat = DateTimeZoneFormat
 	if !config.Log.EnableJSON {
-		zerolog.TimeFieldFormat = DateTimeZoneFormat
 		output := zerolog.ConsoleWriter{
 			Out:             os.Stdout,
 			TimeFormat:      DateTimeZoneFormat,
@@ -132,22 +128,37 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 		}
 		log.Logger = zerolog.New(output).With().Timestamp().Logger()
 	} else {
-		zerolog.TimeFieldFormat = DateTimeZoneFormat
+		log.Logger = zerolog.New(os.Stderr).With().Timestamp().Logger()
 	}
 
 	if config.Log.Metric {
-		metricHook := &MetricLogHook{}
-		metricHook.Init()
-
-		log.Logger = log.Logger.Hook(metricHook)
+		log.Logger = log.Logger.Hook(metricLogHook())
 	}
 
 	if errValidate := ValidateStruct(config); errValidate != nil {
 		// NON si logga la config: a questo punto i ${...} sono già risolti, quindi il dump
-		// conterrebbe password e DSN in chiaro. Il messaggio del Fatal nomina già i campi
-		// invalidi, che è l'unica cosa che serve per correggere il file.
-		log.Fatal().Err(errValidate).Msgf("error validating config, %v", errValidate)
+		// conterrebbe password e DSN in chiaro. L'errore nomina già i campi invalidi, che è
+		// l'unica cosa che serve per correggere il file.
+		return fmt.Errorf("error validating config: %w", errValidate)
 	}
 
 	return nil
+}
+
+// parseLogLevel accetta sia il nome del livello ("debug", "INFO") sia il suo valore numerico
+// zerolog ("-1".."7"). Rifiuta NoLevel e Disabled scritti per nome, perché nessuno dei due è un
+// livello: il primo è ciò che ParseLevel ritorna per la stringa vuota, il secondo spegne anche i
+// Fatal. Chi vuole davvero il silenzio ha `log.ignore`.
+func parseLogLevel(s string) (zerolog.Level, error) {
+	if i, err := strconv.Atoi(s); err == nil {
+		return zerolog.Level(i), nil
+	}
+	lvl, err := zerolog.ParseLevel(strings.ToLower(strings.TrimSpace(s)))
+	if err != nil {
+		return zerolog.NoLevel, fmt.Errorf("log.level %q: %w", s, err)
+	}
+	if lvl == zerolog.NoLevel || lvl == zerolog.Disabled {
+		return zerolog.NoLevel, fmt.Errorf("log.level %q is not a level (use trace, debug, info, warn, error, fatal, panic)", s)
+	}
+	return lvl, nil
 }

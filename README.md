@@ -76,7 +76,10 @@ dipendere dall'ordine di init dei package.
 
 `core.ReadConfig(embeddedYAML, envVarName, target)` carica lo YAML via Viper con sostituzione delle
 variabili d'ambiente (`${ENV_VAR}`), configura il logging e valida la struct (tag `validate:`).
-Normalmente non si chiama a mano: lo fa `Boot`.
+Normalmente non si chiama a mano: lo fa `Boot`. Ogni guasto — file illeggibile, YAML non decodificabile,
+`log.level` non valido, validazione — è **restituito** come `error` (è `Boot` a fare il `log.Fatal`).
+`log.level` assente vale `info`: prima la stringa vuota diventava `NoLevel`, cioè un livello sopra
+Fatal, e ogni `log.Fatal` successivo usciva senza stampare nulla.
 
 Il sottoalbero `config:` ha **due sole sezioni**, imposte dalla libreria:
 
@@ -134,6 +137,19 @@ go-core: i costruttori base riempiono `Ambit` con l'`AppName`, cioè con l'app c
 quindi senza sovrascriverlo un guasto della libreria si presenta come un errore dell'applicazione e
 chi legge il log non sa dove guardare. Ogni lib go-core ha la propria costante `Ambit` e il proprio
 `ERRORI.md`.
+
+Dentro una libreria gli errori si costruiscono con **`core.Errors`**, dichiarato una volta per
+package, così l'ambito non si può dimenticare sul singolo sito:
+
+```go
+var liberr = core.Errors{Ambit: Ambit}
+
+return liberr.Tech(CodeAcquire).WithCause(err)      // 500
+return liberr.Business(CodeSort).WithCause(err)     // 422
+return liberr.NotFound().WithCause(sql.ErrNoRows)   // 404
+```
+
+`Error()` ritorna il `Message`, o il `Code` se il messaggio è vuoto.
 
 L'API è **un costruttore base per status + modificatori ortogonali**, uno per campo, componibili in
 qualsiasi ordine:
@@ -328,6 +344,7 @@ altro default condiviso raffinato per istanza. Regola applicata a ogni campo:
 | `slice` | vuota eredita, altrimenti sostituisce |
 | `bool` | **mai** (false è indistinguibile da "non scritto": serve `*bool`) |
 | struct | ricorsione |
+| struct senza campi esportati (`time.Time`) | valore atomico: eredita se è a zero |
 | altro | **panic** |
 
 Il panic è voluto: il silenzio alternativo è un campo che non eredita senza che nulla lo segnali.
@@ -388,8 +405,10 @@ a, b, appErr := core.ConcurrentTwo(taskA, taskB)                     // due task
 res, appErr := core.ConcurrentN(items, 8, func(i T) (R, *core.ApplicationError) { ... })
 ```
 
-`ConcurrentN` esegue `fn` su ogni item con al massimo `concurrency` goroutine in parallelo; i
-risultati mantengono l'ordine degli input e viene ritornato il primo errore incontrato.
+`ConcurrentN` esegue `fn` su ogni item con al massimo `concurrency` goroutine in parallelo
+(`concurrency <= 0` = nessun limite); i risultati mantengono l'ordine degli input e viene ritornato
+l'errore del primo item fallito in ordine di posizione. Un panic di un task diventa un
+`TechnicalError` con codice `CONCURRENT-PANIC` invece di terminare il processo.
 
 ---
 
@@ -401,7 +420,9 @@ ctx = core.AddEndpointNameMetrics("get-person", ctx)
 ```
 
 Il client porta trace OTel e metriche per endpoint; `AddEndpointNameMetrics` etichetta la chiamata
-nel context.
+nel context. Ha un timeout per richiesta di `core.DefaultHttpClientTimeout` (30s), sovrascrivibile
+con un secondo argomento (`GenerateHttpClientWithInstrumentation("svc", 5*time.Second)`): un
+`http.Client` a zero non ne ha, e un upstream che non risponde bloccava il chiamante per sempre.
 
 ---
 
@@ -442,7 +463,17 @@ core.Execute[mioTask]()   // costruisce il comando cobra, flag auto-derivate, es
   irraggiungibili e insieme pronti a diventare pubblici se una dipendenza servisse quel mux.
   **In mode API il gate è un altro**: lì la porta è quella pubblica dell'API e pprof si accende
   solo con `develop-mode: true` di `go-core-api`.
-- `core.NewTracer` (via `core.WithTracing`) configura l'export OTLP.
+- Il ciclo di vita del server è **`core.ServeOnLifecycle(lc, sh, srv, name)`**, lo stesso usato
+  da `go-core-api`: listen in `OnStart` (una porta occupata fa fallire l'avvio), `Shutdown` col
+  context dell'hook, e un server che muore a regime **fa uscire il processo** (codice 1) invece di
+  lasciarlo vivo senza servire nulla. `core.WaitContext(ctx, &wg)` è l'attesa limitata di un
+  `OnStop` (true = drenato, false = deadline scaduta).
+- `core.NewTracer` (via `core.WithTracing`) configura l'export OTLP. Metriche e tracce portano
+  `service.name` = `AppName` e `service.version` = `BuildVersion` (`OTEL_SERVICE_NAME` e
+  `OTEL_RESOURCE_ATTRIBUTES` vincono sulle tracce).
+- `core.SlogHandler(component)` è uno `slog.Handler` che scrive su zerolog col livello tradotto e il
+  campo `component`: il ponte per le dipendenze che loggano con slog o con un'interfaccia della
+  stessa forma (`gocron.WithLogger(slog.New(core.SlogHandler("gocron")))`).
 - `GOMEMLIMIT` è impostato automaticamente dai limiti del cgroup quando l'app gira in container.
 
 ---
@@ -466,10 +497,22 @@ imposta `core.Boot`. Se i ldflags mancano (build locale), `Boot` riempie i campi
 
 ---
 
+## Filtri a struct taggata — `core.TaggedFields`
+
+`core.TaggedFields(v, keyTag, opTag)` ritorna i campi di una struct filtro che portano entrambi i
+tag (saltando quelli `omitempty` a zero): è lo scheletro dei filter builder di go-core-mongo
+(`field:`/`operator:`) e go-core-sql (`col:`/`op:`). Un campo non esportato con i tag è un errore,
+non un panic.
+
+---
+
 ## Utility
 
-`core.Encrypt`/`core.Decrypt` (AES), le conversioni data/ora (`StringToDate`, `DateToString`,
-`NowTime`, `GetMidnight`, …), `core.GetHostname`, `core.FormatBytes`.
+`core.Encrypt`/`core.Decrypt` (AES-GCM; `Decrypt` prende l'**hex** di ciò che `Encrypt` ritorna —
+è il formato del token di go-core-auth), le conversioni data/ora (`StringToDate`, `DateToString`,
+`NowTime`, `GetMidnight`, …; `ConvertStringToTimeDate` è deprecata in favore di `StringToDate`),
+`core.GetHostname` (letto una volta, `"unknown"` se il sistema non lo dà — è la stessa fonte di
+`locked_by`/`executed_by` e di `task_logs.hostname` in go-core-batch), `core.FormatBytes`.
 
 ---
 

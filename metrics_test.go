@@ -3,13 +3,19 @@ package core
 import (
 	"context"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"testing"
 	"time"
 
+	"go.uber.org/fx"
 	"go.uber.org/fx/fxtest"
 )
+
+type nopShutdowner struct{}
+
+func (nopShutdowner) Shutdown(...fx.ShutdownOption) error { return nil }
 
 // startMetrics avvia il server ops con la sezione `metrics:` data e ritorna il suo base URL.
 // metricsConfig è la var di package che ReadConfig popola: qui la si imposta a mano, che è
@@ -22,7 +28,7 @@ func startMetrics(t *testing.T, cfg MetricsConfig) string {
 	t.Cleanup(func() { metricsConfig = prev })
 
 	lc := fxtest.NewLifecycle(t)
-	if err := NewServerMetrics(lc); err != nil {
+	if err := NewServerMetrics(lc, nopShutdowner{}); err != nil {
 		t.Fatalf("NewServerMetrics: %v", err)
 	}
 	lc.RequireStart()
@@ -38,7 +44,10 @@ func status(t *testing.T, url string) int {
 	if err != nil {
 		t.Fatalf("GET %s: %v", url, err)
 	}
-	defer resp.Body.Close()
+	// Il body va letto: una risposta chunked chiusa a metà lascia la connessione lato server non
+	// idle, e lo Shutdown dell'OnStop la aspetta fino a 5s.
+	_, _ = io.Copy(io.Discard, resp.Body)
+	_ = resp.Body.Close()
 	return resp.StatusCode
 }
 
@@ -129,7 +138,7 @@ func TestServerMetrics_PortaOccupataFallisceOnStart(t *testing.T) {
 	defer func() { metricsConfig = prev }()
 
 	lc := fxtest.NewLifecycle(t)
-	if err := NewServerMetrics(lc); err != nil {
+	if err := NewServerMetrics(lc, nopShutdowner{}); err != nil {
 		t.Fatalf("NewServerMetrics: %v", err)
 	}
 

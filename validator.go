@@ -9,6 +9,7 @@ import (
 	"github.com/go-playground/locales/it"
 	ut "github.com/go-playground/universal-translator"
 	"github.com/go-playground/validator/v10"
+	ittranslations "github.com/go-playground/validator/v10/translations/it"
 	"github.com/rs/zerolog/log"
 )
 
@@ -41,6 +42,13 @@ func init() {
 		}
 		return name
 	})
+
+	// Senza le traduzioni registrate Translate ricade su FieldError.Error(), cioè sul testo
+	// inglese del validator ("Key: 'X.y' Error:Field validation for 'y' failed on the
+	// 'required' tag"): il Translator italiano c'era ma non traduceva nulla.
+	if err := ittranslations.RegisterDefaultTranslations(Validator, Translator.GetFallback()); err != nil {
+		log.Warn().Err(err).Msg("validator: traduzioni italiane non registrate")
+	}
 }
 
 func ValidateStruct(i any) *ApplicationError {
@@ -53,9 +61,9 @@ func ValidateStruct(i any) *ApplicationError {
 
 		if errValidate, ok := errors.AsType[validator.ValidationErrors](verr); ok {
 			for _, everr := range errValidate {
-				errorMessages = append(errorMessages, fmt.Sprintf("Field '%s': %s.", everr.Field(), everr.Translate(Translator.GetFallback())))
+				errorMessages = append(errorMessages, fmt.Sprintf("Field '%s': %s", everr.Field(), everr.Translate(Translator.GetFallback())))
 			}
-			errmsg = fmt.Sprintf("Validation errors: %s", errorMessages)
+			errmsg = "Validation errors: " + strings.Join(errorMessages, "; ")
 		} else {
 			errmsg = fmt.Sprintf("Validation error: %s", verr.Error())
 		}
