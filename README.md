@@ -424,7 +424,7 @@ ciò che chiamano i builder di go-core-sql e go-core-mongo.
 
 `*page.Paging` porta `PageSize`, `CurrentPage`, `TotalCount`, `TotalPages`, `HasNext`, `HasPrevious`
 e li mantiene coerenti (`SetTotalItems`, `IncCurrentPage`, …). È il tipo che i CRUD di go-core-mongo
-e go-core-sql riempiono, e che `coreapi.GeneratePageResponse` traduce negli header di risposta.
+e go-core-sql riempiono, e che `paging.GeneratePageResponse` di go-core-api traduce negli header di risposta.
 
 ---
 
