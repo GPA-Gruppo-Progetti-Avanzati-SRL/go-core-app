@@ -84,10 +84,13 @@ func execute[T ITaskRunner]() error {
 	// RunE e non Run: gli errori risalgono a Execute, che esce con 1 — prima erano quattro
 	// log.Fatal dentro la libreria, cioè un os.Exit che saltava ogni defer del chiamante.
 	Task.RunE = func(cmd *cobra.Command, args []string) error {
-		if err := viper.BindPFlags(cmd.Flags()); err != nil {
+		// Istanza locale: la globale la condivideva con ReadConfig, quindi le chiavi YAML dell'app
+		// potevano finire nei campi del TaskConfig senza che nessun flag le avesse passate.
+		v := viper.New()
+		if err := v.BindPFlags(cmd.Flags()); err != nil {
 			return fmt.Errorf("cli: binding dei flag: %w", err)
 		}
-		if err := viper.Unmarshal(&TaskConfig); err != nil {
+		if err := v.Unmarshal(&TaskConfig); err != nil {
 			return fmt.Errorf("cli: decode della configurazione: %w", err)
 		}
 		logLevel, err := cmd.Flags().GetInt("log")

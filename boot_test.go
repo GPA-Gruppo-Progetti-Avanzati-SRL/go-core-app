@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/rs/zerolog"
+	"github.com/spf13/viper"
 	"go.uber.org/fx"
 )
 
@@ -204,5 +205,26 @@ func TestReadConfig_RitornaGliErrori(t *testing.T) {
 	err := ReadConfig("log:\n  ignore: true\nconfig:\n  other: 1\n", "CORE_TEST_NO_SUCH_ENV", &invalid)
 	if err == nil || !strings.Contains(err.Error(), "name") {
 		t.Fatalf("validazione fallita: atteso un errore che nomini il campo, got %v", err)
+	}
+}
+
+// ReadConfig lavora su un'istanza propria: la viper globale resta vuota, quindi niente la lega allo
+// stato di una chiamata precedente e il CLI non ci trova dentro la config dell'app.
+func TestReadConfig_NonToccaLaViperGlobale(t *testing.T) {
+	keepLogLevel(t)
+	var cfg struct {
+		Name string `mapstructure:"name"`
+	}
+	if err := ReadConfig("log:\n  ignore: true\nconfig:\n  name: primo\n", "CORE_TEST_NO_SUCH_ENV", &cfg); err != nil {
+		t.Fatalf("ReadConfig: %v", err)
+	}
+	if cfg.Name != "primo" {
+		t.Fatalf("config non letta: %+v", cfg)
+	}
+	if got := viper.GetString("config.name"); got != "" {
+		t.Fatalf("la viper globale porta la config dell'app: config.name = %q", got)
+	}
+	if viper.IsSet("log.level") {
+		t.Fatal("i default di ReadConfig sono finiti nella viper globale")
 	}
 }

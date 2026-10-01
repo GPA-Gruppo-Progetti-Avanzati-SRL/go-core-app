@@ -59,29 +59,36 @@ func ReadConfig(projectConfigFile, ConfigFileEnvVar string, appconfig any) error
 		AppConfig: appconfig,
 	}
 
-	viper.SetConfigType("yaml")
+	// Un'istanza locale e non la viper globale del package: quella sopravvive alla chiamata, quindi
+	// una seconda ReadConfig nello stesso processo (i test, un CLI che rilegge) ereditava chiavi e
+	// default della prima, e qualunque altro codice che usasse la globale — il CLI coi suoi flag —
+	// ci leggeva dentro la config dell'app. Breaking a runtime, senza errore di compilazione: un'app
+	// che leggeva viper.Get* dopo l'avvio riceve ora i valori zero, e va migrata ai campi della
+	// propria sezione `app:`.
+	v := viper.New()
+	v.SetConfigType("yaml")
 
-	viper.SetDefault("log.metric", true)
+	v.SetDefault("log.metric", true)
 
 	// Default del server ops. Riproducono il comportamento storico: host vuoto significava
 	// ":2112", cioè tutte le interfacce — necessario perché Prometheus scrapa l'IP del pod, non
 	// 127.0.0.1. pprof resta spento salvo richiesta esplicita: la porta è raggiungibile da chi
 	// arriva al processo, e /debug/pprof/profile è un CPU-burn mentre /heap può contenere segreti.
-	viper.SetDefault("metrics.host", "0.0.0.0")
-	viper.SetDefault("metrics.port", 2112)
-	viper.SetDefault("metrics.pprof", false)
-	viper.SetDefault("metrics.read-header-timeout", 5*time.Second)
+	v.SetDefault("metrics.host", "0.0.0.0")
+	v.SetDefault("metrics.port", 2112)
+	v.SetDefault("metrics.pprof", false)
+	v.SetDefault("metrics.read-header-timeout", 5*time.Second)
 
 	// Senza un default, un file che non nomina `log.level` arriva qui con la stringa vuota, che
 	// zerolog.ParseLevel accetta come NoLevel: il livello globale finiva sopra Fatal, e ogni
 	// log.Fatal successivo — MODE non ammesso, IValidate di Boot, quelli dell'app — usciva con
 	// codice 1 senza stampare nulla.
-	viper.SetDefault("log.level", "info")
+	v.SetDefault("log.level", "info")
 
-	if verr := viper.ReadConfig(cfgFileReader); verr != nil {
+	if verr := v.ReadConfig(cfgFileReader); verr != nil {
 		return fmt.Errorf("unable to read config: %w", verr)
 	}
-	if err := viper.Unmarshal(&config); err != nil {
+	if err := v.Unmarshal(&config); err != nil {
 		return fmt.Errorf("unable to decode config: %w", err)
 	}
 

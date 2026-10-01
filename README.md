@@ -119,6 +119,14 @@ Normalmente non si chiama a mano: lo fa `Boot`. Ogni guasto — file illeggibile
 `log.level` assente vale `info`: prima la stringa vuota diventava `NoLevel`, cioè un livello sopra
 Fatal, e ogni `log.Fatal` successivo usciva senza stampare nulla.
 
+**`ReadConfig` usa un'istanza viper propria**, non quella globale del package `viper`. La globale
+sopravviveva alla chiamata: una seconda `ReadConfig` nello stesso processo ne ereditava i default, e il
+CLI (`cli.Execute`, che faceva `viper.Unmarshal` sulla stessa globale) poteva trovarsi la config
+dell'app dentro il proprio `TaskConfig`; ora anche il CLI ha un'istanza sua. **Breaking a runtime, non
+di compilazione:** un'app che dopo l'avvio legge `viper.GetString(...)` & co. riceve ora i valori zero.
+La migrazione è leggere i campi della propria sezione `app:` (la `*A` che `Boot` supplisce a fx);
+`grep -rn "viper\." --include='*.go' .` trova i siti.
+
 Il sottoalbero `config:` ha **due sole sezioni**, imposte dalla libreria:
 
 ```yaml
