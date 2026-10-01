@@ -4,6 +4,7 @@
 package cli
 
 import (
+	"context"
 	"fmt"
 	"os"
 	"reflect"
@@ -19,22 +20,44 @@ import (
 	"go.uber.org/fx"
 )
 
-func Exec[T ITaskRunner](runner T, shutdowner fx.Shutdowner) {
-
-	go func() {
-		log.Info().Msgf("Executing")
-		runner.Execute()
-		log.Info().Msg("Stopping")
-		// Se lo shutdown non parte il task ha finito ma il processo resta su: senza questa riga
-		// sarebbe un appeso senza spiegazione.
-		if err := shutdowner.Shutdown(); err != nil {
-			log.Error().Err(err).Msg("Shutdown dell'applicazione fallito: il processo resta attivo")
-		}
-	}()
+// Exec esegue il runner a grafo AVVIATO, cioè dopo gli OnStart di tutti i servizi, e poi chiude
+// l'applicazione. Prima la goroutine partiva al momento dell'Invoke, quindi PRIMA degli OnStart: il
+// task poteva usare un client Mongo o SQL non ancora connesso, e la corsa la vinceva quasi sempre.
+//
+// Il context del runner è cancellato all'arresto (SIGTERM, Ctrl-C): un task lungo lo osserva e
+// smette. Un errore del runner fa uscire il processo con 1 — prima Execute non ritornava nulla, e
+// un task fallito usciva con 0, cioè per uno scheduler o una pipeline un successo.
+func Exec[T ITaskRunner](runner T, lc fx.Lifecycle, shutdowner fx.Shutdowner) {
+	ctx, cancel := context.WithCancel(context.Background())
+	lc.Append(fx.Hook{
+		OnStart: func(context.Context) error {
+			go func() {
+				log.Info().Msgf("Executing")
+				code := 0
+				if err := runner.Execute(ctx); err != nil {
+					log.Error().Err(err).Msg("Task fallito")
+					code = 1
+				}
+				log.Info().Msg("Stopping")
+				// Se lo shutdown non parte il task ha finito ma il processo resta su: senza questa riga
+				// sarebbe un appeso senza spiegazione.
+				if err := shutdowner.Shutdown(fx.ExitCode(code)); err != nil {
+					log.Error().Err(err).Msg("Shutdown dell'applicazione fallito: il processo resta attivo")
+				}
+			}()
+			return nil
+		},
+		OnStop: func(context.Context) error {
+			cancel()
+			return nil
+		},
+	})
 }
 
+// ITaskRunner è il task di un binario cli. Execute riceve un context cancellato all'arresto e
+// ritorna l'esito: un errore fa uscire il processo con 1.
 type ITaskRunner interface {
-	Execute()
+	Execute(ctx context.Context) error
 }
 
 var Task = &cobra.Command{}
@@ -58,30 +81,34 @@ func execute[T ITaskRunner]() error {
 	Task.Flags().IntP("log", "l", 1, "level of logging: -1=trace, 0=debug, 1=info, 2=warn, 3=error")
 	Task.Use = core.AppName
 	Task.Version = core.BuildVersion
-	Task.Run = func(cmd *cobra.Command, args []string) {
+	// RunE e non Run: gli errori risalgono a Execute, che esce con 1 — prima erano quattro
+	// log.Fatal dentro la libreria, cioè un os.Exit che saltava ogni defer del chiamante.
+	Task.RunE = func(cmd *cobra.Command, args []string) error {
 		if err := viper.BindPFlags(cmd.Flags()); err != nil {
-			log.Fatal().Err(err).Msg("Error binding flags")
+			return fmt.Errorf("cli: binding dei flag: %w", err)
 		}
 		if err := viper.Unmarshal(&TaskConfig); err != nil {
-			log.Fatal().Err(err).Msg("Error Unmarshal config")
+			return fmt.Errorf("cli: decode della configurazione: %w", err)
 		}
-		logLevel, errll := cmd.Flags().GetInt("log")
-		if errll != nil {
-			log.Fatal().Err(errll).Msg("Error parsing log level")
+		logLevel, err := cmd.Flags().GetInt("log")
+		if err != nil {
+			return fmt.Errorf("cli: flag log: %w", err)
+		}
+		if err := configureLog(logLevel); err != nil {
+			return err
 		}
 		core.Supply(TaskConfig)
-		configureLog(logLevel)
 		core.Invoke(Exec[T])
 		core.Run()
+		return nil
 	}
 	return Task.Execute()
 }
 
-func configureLog(logLevel int) {
-
+func configureLog(logLevel int) error {
 	lvl, err := zerolog.ParseLevel(strings.ToLower(strconv.Itoa(logLevel)))
 	if err != nil {
-		log.Fatal().Err(err).Msg("Error parsing log level")
+		return fmt.Errorf("cli: livello di log %d non valido: %w", logLevel, err)
 	}
 	zerolog.SetGlobalLevel(lvl)
 
@@ -92,7 +119,7 @@ func configureLog(logLevel int) {
 		FormatFieldName: func(i any) string { return fmt.Sprintf("%s:", i) },
 	}
 	log.Logger = zerolog.New(output).With().Timestamp().Logger()
-
+	return nil
 }
 
 type FlagDefinition struct {

@@ -8,8 +8,6 @@ import (
 	"time"
 
 	"github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app"
-
-	"github.com/rs/zerolog/log"
 )
 
 func GetTimestamp() string {
@@ -26,52 +24,59 @@ func StringToDate(date string) (time.Time, *core.Error) {
 	timestamp, err := time.ParseInLocation(core.DateFormat, date, time.Local)
 
 	if err != nil {
-		return time.Time{}, core.BusinessError().
-			WithAmbit(core.Ambit).
-			WithCode(ErrDateParse).
-			WithMessage("StringToDate: data " + strconv.Quote(date) + " non conforme a " + core.DateFormat).
-			WithCause(err)
+		return time.Time{}, parseErr("StringToDate", date, core.DateFormat, err)
 	}
 
 	return timestamp, nil
 }
 
-func StringToDatePtr(date string) *time.Time {
+// parseErr è l'errore di una conversione rifiutata: lo stesso codice per le quattro funzioni, con
+// la funzione e il formato atteso nel messaggio.
+func parseErr(fn, value, layout string, err error) *core.Error {
+	return core.BusinessError().
+		WithAmbit(core.Ambit).
+		WithCode(ErrDateParse).
+		WithMessage(fn + ": data " + strconv.Quote(value) + " non conforme a " + layout).
+		WithCause(err)
+}
+
+// StringToDatePtr è StringToDate con l'assenza: "" vale nil, senza errore. Una stringa non vuota e
+// malformata è un errore e non un nil — prima ritornava nil anche lì, quindi una data sbagliata
+// diventava una data assente e spariva senza che il chiamante potesse saperlo.
+func StringToDatePtr(date string) (*time.Time, *core.Error) {
 	if date == "" {
-		return nil
+		return nil, nil
 	}
 	timestamp, err := time.ParseInLocation(core.DateFormat, date, time.Local)
 	if err != nil {
-		log.Error().Msgf("StringToDatePtr Error parsing date: %s", err.Error())
-		return nil
+		return nil, parseErr("StringToDatePtr", date, core.DateFormat, err)
 	}
-
-	return &timestamp
+	return &timestamp, nil
 }
 
-func StringToDateTime(date string) time.Time {
+// StringToDateTime converte una data con ora (core.DateTimeFormat); "" vale il tempo zero. Una
+// stringa malformata è un errore: prima ritornava il tempo zero, indistinguibile da "".
+func StringToDateTime(date string) (time.Time, *core.Error) {
 	if date == "" {
-		return time.Time{}
+		return time.Time{}, nil
 	}
 	timestamp, err := time.ParseInLocation(core.DateTimeFormat, date, time.Local)
 	if err != nil {
-		log.Error().Msgf("StringToDateTime Error parsing date: %s", err.Error())
-		return time.Time{}
+		return time.Time{}, parseErr("StringToDateTime", date, core.DateTimeFormat, err)
 	}
-	return timestamp
+	return timestamp, nil
 }
 
-func StringToDateTimePtr(date string) *time.Time {
+// StringToDateTimePtr è StringToDateTime con l'assenza: "" vale nil, una stringa malformata è un errore.
+func StringToDateTimePtr(date string) (*time.Time, *core.Error) {
 	if date == "" {
-		return nil
+		return nil, nil
 	}
-
 	timestamp, err := time.ParseInLocation(core.DateTimeFormat, date, time.Local)
 	if err != nil {
-		log.Error().Msgf("StringToDateTimePtr Error parsing date: %s", err.Error())
-		return nil
+		return nil, parseErr("StringToDateTimePtr", date, core.DateTimeFormat, err)
 	}
-	return &timestamp
+	return &timestamp, nil
 }
 
 func DateToString(date time.Time) string {

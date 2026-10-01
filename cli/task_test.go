@@ -1,11 +1,16 @@
 package cli
 
 import (
+	"context"
+	"errors"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/spf13/cobra"
+	"go.uber.org/fx"
+	"go.uber.org/fx/fxtest"
 )
 
 func resetTask(t *testing.T, cfg any) {
@@ -86,5 +91,63 @@ func TestAutoDefineFlags_Required(t *testing.T) {
 	}
 	if ann := Task.Flags().Lookup("path").Annotations[cobra.BashCompOneRequiredFlag]; len(ann) == 0 {
 		t.Fatal("flag obbligatorio non marcato")
+	}
+}
+
+// startedService segna l'esecuzione del proprio OnStart, come un client che si connette all'avvio.
+type startedService struct{ started atomic.Bool }
+
+type orderRunner struct {
+	svc  *startedService
+	seen chan bool
+}
+
+func (r orderRunner) Execute(context.Context) error { r.seen <- r.svc.started.Load(); return nil }
+
+// Il task gira a grafo avviato: prima la goroutine partiva al momento dell'Invoke, PRIMA degli
+// OnStart, e un task poteva usare un client non ancora connesso.
+func TestExec_DopoGliOnStart(t *testing.T) {
+	seen := make(chan bool, 1)
+	app := fxtest.New(t,
+		fx.Provide(func(lc fx.Lifecycle) *startedService {
+			s := &startedService{}
+			lc.Append(fx.Hook{OnStart: func(context.Context) error { s.started.Store(true); return nil }})
+			return s
+		}),
+		fx.Provide(func(s *startedService) orderRunner { return orderRunner{svc: s, seen: seen} }),
+		fx.Invoke(Exec[orderRunner]),
+	)
+	app.RequireStart()
+	defer app.RequireStop()
+	select {
+	case started := <-seen:
+		if !started {
+			t.Fatal("il task è partito prima degli OnStart dei servizi")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("il task non è partito")
+	}
+}
+
+type failingRunner struct{}
+
+func (failingRunner) Execute(context.Context) error { return errors.New("export fallito") }
+
+// Un task fallito chiude l'applicazione con 1: prima Execute non ritornava nulla, e il processo
+// usciva con 0 anche quando il lavoro non era stato fatto.
+func TestExec_ErroreDelTaskEsceConUno(t *testing.T) {
+	app := fxtest.New(t,
+		fx.Supply(failingRunner{}),
+		fx.Invoke(Exec[failingRunner]),
+	)
+	app.RequireStart()
+	defer app.RequireStop()
+	select {
+	case sig := <-app.Wait():
+		if sig.ExitCode != 1 {
+			t.Fatalf("exit code = %d, atteso 1", sig.ExitCode)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("l'applicazione non si è chiusa")
 	}
 }

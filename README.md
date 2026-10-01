@@ -482,13 +482,24 @@ Per i binari one-shot (non fx-server):
 
 ```go
 type ITaskRunner interface {
-    Run(ctx context.Context) error
+    Execute(ctx context.Context) error
 }
 
 cli.Execute[mioTask]()   // costruisce il comando cobra, flag auto-derivate, esegue e termina
 ```
 
 `cli.TaskConfig` porta la config del task; le flag sono definite automaticamente dai campi.
+
+- Il task gira **a grafo avviato**, dopo gli `OnStart` di tutti i servizi: prima partiva al momento
+  dell'`Invoke`, e poteva usare un client Mongo o SQL non ancora connesso.
+- **Un errore di `Execute` fa uscire il processo con 1** (`fx.ExitCode`), come un errore di flag o di
+  config. Prima `Execute()` non ritornava nulla e un task fallito usciva con 0. Il `ctx` è cancellato
+  all'arresto (SIGTERM): un task lungo lo osserva e smette.
+- Nessun `log.Fatal` nella libreria: gli errori di binding, decode e livello di log risalgono a
+  `cli.Execute`, che li stampa ed esce con 1.
+
+**Migrazione (breaking, di compilazione):** `func (t *mioTask) Execute()` →
+`func (t *mioTask) Execute(ctx context.Context) error`.
 
 ---
 
@@ -560,7 +571,10 @@ non un panic.
 
 `utils.Encrypt`/`utils.Decrypt` (AES-GCM; `Decrypt` prende l'**hex** di ciò che `Encrypt` ritorna —
 è il formato del token di go-core-auth), le conversioni data/ora (`StringToDate`, `DateToString`,
-`NowTime`, `GetMidnight`, …),
+`NowTime`, `GetMidnight`, …) — le `StringTo*` ritornano tutte `(valore, *core.Error)`: `""` è
+l'assenza (nil o tempo zero, senza errore), una stringa malformata è `ERR-DATE`. Prima
+`StringToDatePtr`/`StringToDateTime`/`StringToDateTimePtr` davano nil o tempo zero anche lì, e una
+data sbagliata diventava una data assente; la migrazione è di compilazione,
 `utils.GetHostname` (letto una volta, `"unknown"` se il sistema non lo dà — è la stessa fonte di
 `locked_by`/`executed_by` e di `task_logs.hostname` in go-core-batch), `core.FormatBytes`.
 

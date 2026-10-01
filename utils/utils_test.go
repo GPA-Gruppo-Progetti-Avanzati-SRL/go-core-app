@@ -92,3 +92,30 @@ func TestEncryptDecrypt_RoundTripViaHex(t *testing.T) {
 		t.Fatal("chiave diversa: atteso errore")
 	}
 }
+
+// "" è l'assenza, una stringa malformata è un errore: prima le due cose davano lo stesso nil (o lo
+// stesso tempo zero), e una data sbagliata spariva.
+func TestStringToDateVarianti_ErroreNonAssenza(t *testing.T) {
+	if p, err := StringToDatePtr(""); p != nil || err != nil {
+		t.Fatalf(`StringToDatePtr("") = %v, %v`, p, err)
+	}
+	if p, err := StringToDateTimePtr(""); p != nil || err != nil {
+		t.Fatalf(`StringToDateTimePtr("") = %v, %v`, p, err)
+	}
+	if v, err := StringToDateTime(""); !v.IsZero() || err != nil {
+		t.Fatalf(`StringToDateTime("") = %v, %v`, v, err)
+	}
+	for nome, err := range map[string]*core.Error{
+		"StringToDatePtr":     func() *core.Error { _, e := StringToDatePtr("31/02"); return e }(),
+		"StringToDateTime":    func() *core.Error { _, e := StringToDateTime("ieri"); return e }(),
+		"StringToDateTimePtr": func() *core.Error { _, e := StringToDateTimePtr("ieri"); return e }(),
+	} {
+		if err == nil || err.Code != ErrDateParse {
+			t.Errorf("%s: errore = %v, atteso %s", nome, err, ErrDateParse)
+			continue
+		}
+	}
+	if p, err := StringToDatePtr(DateToString(NowTime())); p == nil || err != nil {
+		t.Fatalf("una data valida: %v, %v", p, err)
+	}
+}
