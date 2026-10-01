@@ -539,7 +539,18 @@ cli.Execute[mioTask]()   // costruisce il comando cobra, flag auto-derivate, ese
   `OnStop` (true = drenato, false = deadline scaduta).
 - `observability.NewTracer` (via `core.WithTracing`) configura l'export OTLP. Metriche e tracce portano
   `service.name` = `AppName` e `service.version` = `BuildVersion` (`OTEL_SERVICE_NAME` e
-  `OTEL_RESOURCE_ATTRIBUTES` vincono sulle tracce).
+  `OTEL_RESOURCE_ATTRIBUTES` vincono sulle tracce). **Il tracing si spegne dall'ambiente**, con un
+  `Info` al boot che dice perché: `OTEL_SDK_DISABLED=true` (la variabile della spec OTel, che l'SDK
+  Go non legge da sé; un valore diverso da `true`/`false` dà un Warn e lascia acceso),
+  `OTEL_TRACES_EXPORTER=none` (prima scartava l'export ma il provider registrava comunque ogni
+  span), e **l'assenza di una destinazione** — né `OTEL_TRACES_EXPORTER` né
+  `OTEL_EXPORTER_OTLP_[TRACES_]ENDPOINT`. Quest'ultimo è **breaking**: prima autoexport ricadeva su
+  `localhost:4318`, quindi in locale ogni export falliva (`traces export: ... connection refused`)
+  e chi aveva un collector in ascolto lì senza scriverne l'endpoint ora deve impostare
+  `OTEL_EXPORTER_OTLP_ENDPOINT`. Da spento il propagator resta installato (un `traceparent` in
+  ingresso arriva comunque alle chiamate in uscita), e a tracing acceso gli errori dell'SDK vanno su
+  zerolog (`Warn`, `component=otel`) invece che sul log stdlib. Le metriche Prometheus non sono
+  toccate da nessuna di queste variabili.
 - `observability.SlogHandler(component)` è uno `slog.Handler` che scrive su zerolog col livello tradotto e il
   campo `component`: il ponte per le dipendenze che loggano con slog o con un'interfaccia della
   stessa forma (`gocron.WithLogger(slog.New(observability.SlogHandler("gocron")))`).
