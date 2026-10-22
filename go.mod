@@ -1,9 +1,9 @@
 module github.com/GPA-Gruppo-Progetti-Avanzati-SRL/go-core-app
 
-go 1.27.2
+go 1.27.3
 
 require (
-	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.95
+	github.com/GPA-Gruppo-Progetti-Avanzati-SRL/tpm-common v0.1.96
 	github.com/KimMachineGun/automemlimit v1.0.0
 	github.com/go-playground/locales v0.14.2
 	github.com/go-playground/universal-translator v0.18.2
