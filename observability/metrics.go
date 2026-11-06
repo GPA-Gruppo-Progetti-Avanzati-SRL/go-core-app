@@ -86,7 +86,17 @@ func serviceAttributes() []attribute.KeyValue {
 	return attrs
 }
 
-func initMeterProvider() error {
+// InitMeterProvider installa il MeterProvider OTel globale con l'exporter Prometheus, che si
+// registra sul registry di DEFAULT. La chiama chiunque serva quel registry — il server ops di
+// NewServerMetrics e il /metrics di go-core-api — perché senza provider otel.Meter restituisce
+// strumenti no-op: le metriche OTel delle librerie (per esempio quelle del pool di
+// tpm-mongo-common) sembrano scritte e non arrivano da nessuna parte, mentre quelle registrate
+// direttamente su Prometheus escono. È idempotente: le chiamate dopo la prima restituiscono
+// l'esito della prima.
+//
+// Un'app che installa un proprio MeterProvider con un altro exporter Prometheus sul registry di
+// default non deve servire /metrics da go-core: le stesse metric family risulterebbero duplicate.
+func InitMeterProvider() error {
 	meterProviderOnce.Do(func() {
 		promExporter, err := prometheus.New(prometheus.WithoutScopeInfo())
 		if err != nil {
@@ -118,11 +128,11 @@ func initMeterProvider() error {
 // era silenzio totale e il processo restava "sano" senza servire nulla. Il ciclo di vita è quello
 // di ServeOnLifecycle: un server che muore a regime fa uscire il processo.
 //
-// Il MeterProvider è inizializzato una volta sola per processo (vedi initMeterProvider): il
+// Il MeterProvider è inizializzato una volta sola per processo (vedi InitMeterProvider): il
 // registry Prometheus è globale, quindi è l'unica semantica che non rompe /metrics.
 func NewServerMetrics(lc fx.Lifecycle, sh fx.Shutdowner) error {
 
-	if err := initMeterProvider(); err != nil {
+	if err := InitMeterProvider(); err != nil {
 		return err
 	}
 
